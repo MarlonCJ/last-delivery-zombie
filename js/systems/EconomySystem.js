@@ -5,6 +5,8 @@
  * - Dinero: divisa exclusiva para compra de equipamiento y armas.
  */
 
+import { LIFE_SCORE_INTERVAL } from './SaveSystem.js';
+
 export class EconomySystem {
     constructor(saveSystem) {
         this.saveSystem = saveSystem;
@@ -48,14 +50,17 @@ export class EconomySystem {
             this.saveSystem.state.economy.highScore = this.saveSystem.state.economy.score;
         }
 
-        // Cada 3000 puntos acumulados otorga +1 vida extra al jugador
+        // Cada 10,000 puntos acumulados otorga +1 vida extra al jugador
         let livesGained = 0;
-        if (!Number.isFinite(this.saveSystem.state.player.nextLifeScore) || this.saveSystem.state.player.nextLifeScore < 3000) {
-            this.saveSystem.state.player.nextLifeScore = (Math.floor((this.saveSystem.state.economy.score - validPoints) / 3000) + 1) * 3000;
+        if (!Number.isFinite(this.saveSystem.state.player.nextLifeScore) ||
+            this.saveSystem.state.player.nextLifeScore < LIFE_SCORE_INTERVAL ||
+            this.saveSystem.state.player.nextLifeScore % LIFE_SCORE_INTERVAL !== 0) {
+            this.saveSystem.state.player.nextLifeScore =
+                (Math.floor((this.saveSystem.state.economy.score - validPoints) / LIFE_SCORE_INTERVAL) + 1) * LIFE_SCORE_INTERVAL;
         }
         while (this.saveSystem.state.economy.score >= this.saveSystem.state.player.nextLifeScore) {
             this.saveSystem.state.player.lives = Math.max(1, (this.saveSystem.state.player.lives || 0)) + 1;
-            this.saveSystem.state.player.nextLifeScore += 3000;
+            this.saveSystem.state.player.nextLifeScore += LIFE_SCORE_INTERVAL;
             livesGained++;
         }
 

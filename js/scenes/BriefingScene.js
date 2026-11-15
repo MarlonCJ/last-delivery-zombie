@@ -6,6 +6,8 @@
  * puede realizarse antes de iniciar la misión.
  */
 
+import { LIFE_SCORE_INTERVAL } from '../systems/SaveSystem.js';
+
 export class BriefingScene {
     constructor(engine) {
         this.engine = engine;
@@ -124,7 +126,7 @@ export class BriefingScene {
         }
         if (this.missionRewardEl) {
             const lives = this.engine.saveSystem.getLives();
-            this.missionRewardEl.textContent = `$${level.baseMoneyReward} USD  |  ♥ ${lives} Vidas (+1 cada 3,000 PTS)`;
+            this.missionRewardEl.textContent = `$${level.baseMoneyReward} USD  |  ♥ ${lives} Vidas (+1 cada ${LIFE_SCORE_INTERVAL.toLocaleString('en-US')} PTS)`;
         }
         if (this.objectivesListEl) {
             this.objectivesListEl.innerHTML = '';

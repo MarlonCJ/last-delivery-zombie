@@ -6,7 +6,8 @@
  *   2) Bloque Quirúrgico en Apagón (4,000 - 8,200 px)
  *   3) Subsuelo Biotech Labs Sector B-3 con cápsulas mutagénicas y fosas de ácido (8,200 - 12,000 px)
  * Incluye cajas empujables, objetos 100% en sprites HD, las 8 especies de zombis, VFX en sprites,
- * 3 vidas con reaparición en Checkpoints, vida extra cada 3,000 pts y Jefe Final Paciente Cero.
+ * 3 vidas con reaparición en Checkpoints, vida extra cada 10,000 pts y Jefe Final Paciente
+ * Cero.
  */
 
 import { Camera2D } from '../core/Camera2D.js';
@@ -15,6 +16,7 @@ import { Player } from '../entities/Player.js';
 import { Zombie } from '../entities/Zombie.js';
 import { Boss } from '../entities/Boss.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
+import { LIFE_SCORE_INTERVAL } from '../systems/SaveSystem.js';
 
 const WORLD_WIDTH = 12000;
 const WORLD_HEIGHT = 720;
@@ -75,7 +77,7 @@ export class Level02 {
             this.combat?.spawnFloatingText(
                 this.player.x - 24,
                 this.player.y - 34,
-                `★ ¡+1 VIDA EXTRA POR 3000 PTS! (VIDAS: ${total})`,
+                `★ ¡+1 VIDA EXTRA POR ${LIFE_SCORE_INTERVAL.toLocaleString('en-US')} PTS! (VIDAS: ${total})`,
                 '#ffd166'
             );
             this._syncHud();
@@ -928,8 +930,8 @@ export class Level02 {
         if (this.hudMoney) this.hudMoney.textContent = `$${this.engine.economy.getMoney()}`;
         if (this.hudScore) {
             const sc = this.engine.economy.getScore();
-            const nextLife = this.engine.saveSystem.state.player.nextLifeScore || 3000;
-            this.hudScore.textContent = `${sc} (Vida: ${nextLife})`;
+            const nextLife = this.engine.saveSystem.state.player.nextLifeScore || LIFE_SCORE_INTERVAL;
+            this.hudScore.textContent = `${sc} (Vida: ${nextLife.toLocaleString('en-US')})`;
         }
 
         const weapon = this.engine.inventory.getEquippedWeapon();

@@ -7,6 +7,9 @@
 const STORAGE_KEY = 'last_delivery_zombie_save';
 const CURRENT_VERSION = '1.2.0';
 
+// Cada 10,000 puntos acumulados se otorga +1 vida extra.
+export const LIFE_SCORE_INTERVAL = 10000;
+
 export const DEFAULT_CONTROLS = Object.freeze({
     moveLeft: ['KeyA', 'ArrowLeft'],
     moveRight: ['KeyD', 'ArrowRight'],
@@ -28,7 +31,7 @@ function createDefaultState() {
             completedLevels: [],
             introSeen: false,
             lives: 3,
-            nextLifeScore: 3000
+            nextLifeScore: LIFE_SCORE_INTERVAL
         },
         economy: {
             money: 0,
@@ -135,7 +138,16 @@ export class SaveSystem {
         const savedScore = Number.isFinite(saved.economy?.score) && saved.economy.score >= 0
             ? Math.floor(saved.economy.score)
             : defaults.economy.score;
-        const defaultNextLife = (Math.floor(savedScore / 3000) + 1) * 3000;
+        const defaultNextLife = (Math.floor(savedScore / LIFE_SCORE_INTERVAL) + 1) * LIFE_SCORE_INTERVAL;
+
+        // Migración: descarta umbrales antiguos (3,000 pts) o desalineados y los
+        // recoloca en el siguiente múltiplo de 10,000 puntos.
+        const savedNextLife = saved.player?.nextLifeScore;
+        const normalizedNextLife = Number.isInteger(savedNextLife) &&
+            savedNextLife > savedScore &&
+            savedNextLife % LIFE_SCORE_INTERVAL === 0
+            ? savedNextLife
+            : defaultNextLife;
 
         const merged = {
             version: CURRENT_VERSION,
@@ -154,9 +166,7 @@ export class SaveSystem {
                 lives: Number.isInteger(saved.player?.lives) && saved.player.lives >= 1
                     ? saved.player.lives
                     : defaults.player.lives,
-                nextLifeScore: Number.isInteger(saved.player?.nextLifeScore) && saved.player.nextLifeScore > savedScore
-                    ? saved.player.nextLifeScore
-                    : defaultNextLife
+                nextLifeScore: normalizedNextLife
             },
             economy: {
                 money: Number.isFinite(saved.economy?.money) && saved.economy.money >= 0

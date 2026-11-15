@@ -4,7 +4,8 @@
  * Escenario urbano nocturno HD con profundidad simétrica 2.5D, vehículos y objetos
  * renderizados 100% mediante sprites pixel-art HD (ambulancias, patrullas, taxis, camiones,
  * andamios, generadores, consolas, paradas de autobús, cajas empujables, VFX en sprites),
- * sistema de 3 vidas con reaparición en Checkpoints, vida extra cada 3,000 pts y 8 tipos de zombis.
+ * sistema de 3 vidas con reaparición en Checkpoints, vida extra cada 10,000 pts
+ * y 8 tipos de zombis.
  */
 
 import { Camera2D } from '../core/Camera2D.js';
@@ -13,6 +14,7 @@ import { Player } from '../entities/Player.js';
 import { Zombie } from '../entities/Zombie.js';
 import { Boss } from '../entities/Boss.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
+import { LIFE_SCORE_INTERVAL } from '../systems/SaveSystem.js';
 
 const WORLD_WIDTH = 10400;
 const WORLD_HEIGHT = 720;
@@ -73,7 +75,7 @@ export class Level01 {
             this.combat?.spawnFloatingText(
                 this.player.x - 24,
                 this.player.y - 34,
-                `★ ¡+1 VIDA EXTRA POR 3000 PTS! (VIDAS: ${total})`,
+                `★ ¡+1 VIDA EXTRA POR ${LIFE_SCORE_INTERVAL.toLocaleString('en-US')} PTS! (VIDAS: ${total})`,
                 '#ffd166'
             );
             this._syncHud();
@@ -911,8 +913,8 @@ export class Level01 {
         if (this.hudMoney) this.hudMoney.textContent = `$${this.engine.economy.getMoney()}`;
         if (this.hudScore) {
             const sc = this.engine.economy.getScore();
-            const nextLife = this.engine.saveSystem.state.player.nextLifeScore || 3000;
-            this.hudScore.textContent = `${sc} (Vida: ${nextLife})`;
+            const nextLife = this.engine.saveSystem.state.player.nextLifeScore || LIFE_SCORE_INTERVAL;
+            this.hudScore.textContent = `${sc} (Vida: ${nextLife.toLocaleString('en-US')})`;
         }
 
         const weapon = this.engine.inventory.getEquippedWeapon();
