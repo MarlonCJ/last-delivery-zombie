@@ -1,9 +1,12 @@
 /**
  * SpriteAtlas.js
- * Sistema de renderizado de sprites 2D basado en el atlas extraído (assets/sprites/game_atlas.png).
- * Provee dibujo pixel-art nítido alineado a la base de los pies, volteo horizontal,
- * destellos de impacto y acceso a retratos de expresiones e íconos de escenario.
+ * Sistema de renderizado de sprites 2D basado en los atlas extraídos
+ * (assets/sprites/game_atlas_hd.png y assets/sprites/game_atlas_ext_hd.png).
+ * Provee dibujo HD nítido alineado a la base de los pies o al centro, volteo horizontal,
+ * rotación, destellos de impacto y acceso a vehículos, armas, VFX y las 8 especies de zombis.
  */
+
+import { EXT_ATLAS_META } from './SpriteAtlasExtMeta.js';
 
 export const ATLAS_META = {
     animations: {
@@ -195,6 +198,7 @@ export class SpriteAtlas {
     constructor(assetLoader = null) {
         this.assets = assetLoader;
         this.meta = ATLAS_META;
+        this.extMeta = EXT_ATLAS_META;
     }
 
     getImage() {
@@ -206,24 +210,33 @@ export class SpriteAtlas {
         return img;
     }
 
+    getExtImage() {
+        if (!this.assets) return null;
+        const img = this.assets.getImage('game_atlas_ext');
+        if (!img) return null;
+        if (typeof img.complete === 'boolean' && !img.complete) return null;
+        if (typeof img.naturalWidth === 'number' && img.naturalWidth === 0) return null;
+        return img;
+    }
+
     isReady() {
-        return Boolean(this.getImage());
+        return Boolean(this.getImage() || this.getExtImage());
     }
 
     getFrameCount(animKey) {
-        const frames = this.meta.animations[animKey];
+        const frames = this.meta.animations[animKey] || this.extMeta.animations[animKey];
         return frames ? frames.length : 0;
     }
 
     getFrameMeta(animKey, frameIndex = 0) {
-        const frames = this.meta.animations[animKey];
+        const frames = this.meta.animations[animKey] || this.extMeta.animations[animKey];
         if (!frames || frames.length === 0) return null;
         const idx = Math.max(0, Math.min(frames.length - 1, Math.floor(frameIndex) % frames.length));
         return frames[idx];
     }
 
     getSpriteMeta(spriteKey) {
-        return this.meta.sprites[spriteKey] || null;
+        return this.meta.sprites[spriteKey] || this.extMeta.sprites[spriteKey] || null;
     }
 
     getAtlasScale(img) {
@@ -233,25 +246,41 @@ export class SpriteAtlas {
         return img.naturalWidth >= 2048 ? Math.round(img.naturalWidth / 1024) : 1;
     }
 
+    getExtAtlasScale(img) {
+        if (!img || typeof img.naturalWidth !== 'number' || img.naturalWidth <= 0) {
+            return 1;
+        }
+        return img.naturalWidth >= 1800 ? (img.naturalWidth / 2048) : (img.naturalWidth / 2048);
+    }
+
     /**
-     * Dibuja un fotograma de animación alineado a la base central de los pies (centerX, bottomY).
+     * Dibuja un fotograma de animación alineado a la base central de los pies (centerX, bottomY),
+     * o centrado si options.centerAligned === true.
      * Retorna true si el atlas estaba listo y se dibujó, o false para permitir fallback procedural.
      */
     drawFrame(ctx, animKey, frameIndex, centerX, bottomY, options = {}) {
-        const img = this.getImage();
-        if (!img || typeof ctx.drawImage !== 'function') return false;
+        if (!ctx || typeof ctx.drawImage !== 'function') return false;
 
-        const frames = this.meta.animations[animKey];
+        let frames = this.meta.animations[animKey];
+        let isExt = false;
+        if (!frames) {
+            frames = this.extMeta.animations[animKey];
+            isExt = true;
+        }
         if (!frames || frames.length === 0) return false;
+
+        const img = isExt ? this.getExtImage() : this.getImage();
+        if (!img) return false;
 
         const loop = options.loop !== false;
         const rawIdx = Math.max(0, Math.floor(frameIndex));
         const idx = loop ? (rawIdx % frames.length) : Math.min(frames.length - 1, rawIdx);
         const f = frames[idx];
-        const mul = this.getAtlasScale(img);
+        const mul = isExt ? this.getExtAtlasScale(img) : this.getAtlasScale(img);
 
-        const refH = this.meta.refHeights?.[animKey] || f.h || 48;
-        const scale = options.targetHeight ? (options.targetHeight / refH) : (options.scale ?? 1.65);
+        const refMap = isExt ? this.extMeta.refHeights : this.meta.refHeights;
+        const refH = refMap?.[animKey] || f.h || 48;
+        const scale = options.targetHeight ? (options.targetHeight / refH) : (options.scale ?? (isExt ? 1.0 : 1.65));
         const squashX = options.squashX ?? 1;
         const squashY = options.squashY ?? 1;
         const flipX = Boolean(options.flipX);
@@ -261,6 +290,7 @@ export class SpriteAtlas {
 
         const dw = f.w * scale * squashX;
         const dh = f.h * scale * squashY;
+        const drawY = options.centerAligned ? (-dh * 0.5) : (-dh);
 
         ctx.save();
         const prevSmooth = ctx.imageSmoothingEnabled;
@@ -271,6 +301,9 @@ export class SpriteAtlas {
         if (alpha < 1) ctx.globalAlpha *= alpha;
 
         ctx.translate(centerX + offsetX, bottomY + offsetY);
+        if (options.rotation) {
+            ctx.rotate(options.rotation);
+        }
         if (flipX) {
             ctx.scale(-1, 1);
         }
@@ -278,13 +311,13 @@ export class SpriteAtlas {
         ctx.drawImage(
             img,
             f.x * mul, f.y * mul, f.w * mul, f.h * mul,
-            -dw * 0.5, -dh, dw, dh
+            -dw * 0.5, drawY, dw, dh
         );
 
         if (options.hitFlash) {
             ctx.globalCompositeOperation = 'source-atop';
             ctx.fillStyle = options.flashColor || 'rgba(255, 90, 90, 0.55)';
-            ctx.fillRect(-dw * 0.5, -dh, dw, dh);
+            ctx.fillRect(-dw * 0.5, drawY, dw, dh);
         }
 
         ctx.imageSmoothingEnabled = prevSmooth;
@@ -293,17 +326,24 @@ export class SpriteAtlas {
     }
 
     /**
-     * Dibuja un sprite individual (prop, retrato o ícono) dentro del rectángulo destino (x, y, w, h).
+     * Dibuja un sprite individual (vehículo, arma, prop, retrato o ícono) dentro del rectángulo destino (x, y, w, h).
      */
     drawSprite(ctx, spriteKey, x, y, w = null, h = null, options = {}) {
-        const img = this.getImage();
-        if (!img || typeof ctx.drawImage !== 'function') return false;
+        if (!ctx || typeof ctx.drawImage !== 'function') return false;
 
-        const s = this.meta.sprites[spriteKey];
+        let s = this.meta.sprites[spriteKey];
+        let isExt = false;
+        if (!s) {
+            s = this.extMeta.sprites[spriteKey];
+            isExt = true;
+        }
         if (!s) return false;
 
-        const mul = this.getAtlasScale(img);
-        const scale = options.scale ?? 1;
+        const img = isExt ? this.getExtImage() : this.getImage();
+        if (!img) return false;
+
+        const mul = isExt ? this.getExtAtlasScale(img) : this.getAtlasScale(img);
+        const scale = options.scale ?? (isExt ? 0.5 : 1);
         const dw = w !== null ? w : s.w * scale;
         const dh = h !== null ? h : s.h * scale;
 
@@ -317,12 +357,32 @@ export class SpriteAtlas {
             ctx.globalAlpha *= options.alpha;
         }
 
-        if (options.flipX) {
+        if (options.rotation) {
+            ctx.translate(x + dw * 0.5, y + dh * 0.5);
+            ctx.rotate(options.rotation);
+            if (options.flipX) ctx.scale(-1, 1);
+            ctx.drawImage(img, s.x * mul, s.y * mul, s.w * mul, s.h * mul, -dw * 0.5, -dh * 0.5, dw, dh);
+            if (options.hitFlash) {
+                ctx.globalCompositeOperation = 'source-atop';
+                ctx.fillStyle = options.flashColor || 'rgba(255, 95, 95, 0.55)';
+                ctx.fillRect(-dw * 0.5, -dh * 0.5, dw, dh);
+            }
+        } else if (options.flipX) {
             ctx.translate(x + dw, y);
             ctx.scale(-1, 1);
             ctx.drawImage(img, s.x * mul, s.y * mul, s.w * mul, s.h * mul, 0, 0, dw, dh);
+            if (options.hitFlash) {
+                ctx.globalCompositeOperation = 'source-atop';
+                ctx.fillStyle = options.flashColor || 'rgba(255, 95, 95, 0.55)';
+                ctx.fillRect(0, 0, dw, dh);
+            }
         } else {
             ctx.drawImage(img, s.x * mul, s.y * mul, s.w * mul, s.h * mul, x, y, dw, dh);
+            if (options.hitFlash) {
+                ctx.globalCompositeOperation = 'source-atop';
+                ctx.fillStyle = options.flashColor || 'rgba(255, 95, 95, 0.55)';
+                ctx.fillRect(x, y, dw, dh);
+            }
         }
 
         ctx.imageSmoothingEnabled = prevSmooth;

@@ -5,7 +5,7 @@
  */
 
 const STORAGE_KEY = 'last_delivery_zombie_save';
-const CURRENT_VERSION = '1.1.0';
+const CURRENT_VERSION = '1.2.0';
 
 export const DEFAULT_CONTROLS = Object.freeze({
     moveLeft: ['KeyA', 'ArrowLeft'],
@@ -26,7 +26,9 @@ function createDefaultState() {
             name: '',
             currentLevel: 1,
             completedLevels: [],
-            introSeen: false
+            introSeen: false,
+            lives: 3,
+            nextLifeScore: 3000
         },
         economy: {
             money: 0,
@@ -34,24 +36,27 @@ function createDefaultState() {
             highScore: 0
         },
         inventory: {
-            unlockedWeapons: ['flashlight_melee', 'pistol_9mm', 'shotgun_combat'],
+            unlockedWeapons: ['flashlight_melee', 'machete_combat', 'pistol_9mm', 'revolver_magnum', 'shotgun_combat'],
             purchasedWeapons: ['flashlight_melee', 'pistol_9mm'],
+            loadout: ['flashlight_melee', 'pistol_9mm'],
             equippedWeapon: 'pistol_9mm',
             medkits: 2,
             armorLevel: 0,
             damageUpgradeLevel: 0,
             ammoReserves: {
-                pistol_9mm: 36,
-                shotgun_combat: 16,
-                smg_tactical: 60,
-                rifle_bio: 45
+                pistol_9mm: 48,
+                revolver_magnum: 30,
+                shotgun_combat: 24,
+                smg_tactical: 84,
+                rifle_bio: 72,
+                flamethrower_bio: 120
             }
         },
         settings: {
             soundEnabled: true,
-            masterVolume: 0.8,
-            musicVolume: 0.65,
-            sfxVolume: 0.85,
+            masterVolume: 0.92,
+            musicVolume: 0.62,
+            sfxVolume: 0.96,
             particleQuality: 'high',
             showFps: false,
             controls: structuredClone(DEFAULT_CONTROLS)
@@ -115,6 +120,23 @@ export class SaveSystem {
             return defaults;
         }
 
+        const purchasedList = Array.isArray(saved.inventory?.purchasedWeapons) && saved.inventory.purchasedWeapons.length > 0
+            ? [...new Set(['flashlight_melee', 'pistol_9mm', ...saved.inventory.purchasedWeapons])]
+            : defaults.inventory.purchasedWeapons;
+
+        const rawLoadout = Array.isArray(saved.inventory?.loadout) && saved.inventory.loadout.length > 0
+            ? saved.inventory.loadout.filter(id => typeof id === 'string' && purchasedList.includes(id))
+            : purchasedList.slice(0, 3);
+        const sanitizedLoadout = [...new Set(rawLoadout)].slice(0, 3);
+        if (sanitizedLoadout.length === 0) {
+            sanitizedLoadout.push('flashlight_melee', 'pistol_9mm');
+        }
+
+        const savedScore = Number.isFinite(saved.economy?.score) && saved.economy.score >= 0
+            ? Math.floor(saved.economy.score)
+            : defaults.economy.score;
+        const defaultNextLife = (Math.floor(savedScore / 3000) + 1) * 3000;
+
         const merged = {
             version: CURRENT_VERSION,
             updatedAt: saved.updatedAt || defaults.updatedAt,
@@ -128,15 +150,19 @@ export class SaveSystem {
                 completedLevels: Array.isArray(saved.player?.completedLevels)
                     ? saved.player.completedLevels.filter(Number.isInteger)
                     : defaults.player.completedLevels,
-                introSeen: Boolean(saved.player?.introSeen)
+                introSeen: Boolean(saved.player?.introSeen),
+                lives: Number.isInteger(saved.player?.lives) && saved.player.lives >= 1
+                    ? saved.player.lives
+                    : defaults.player.lives,
+                nextLifeScore: Number.isInteger(saved.player?.nextLifeScore) && saved.player.nextLifeScore > savedScore
+                    ? saved.player.nextLifeScore
+                    : defaultNextLife
             },
             economy: {
                 money: Number.isFinite(saved.economy?.money) && saved.economy.money >= 0
                     ? Math.floor(saved.economy.money)
                     : defaults.economy.money,
-                score: Number.isFinite(saved.economy?.score) && saved.economy.score >= 0
-                    ? Math.floor(saved.economy.score)
-                    : defaults.economy.score,
+                score: savedScore,
                 highScore: Number.isFinite(saved.economy?.highScore) && saved.economy.highScore >= 0
                     ? Math.floor(saved.economy.highScore)
                     : defaults.economy.highScore
@@ -145,13 +171,12 @@ export class SaveSystem {
                 unlockedWeapons: Array.isArray(saved.inventory?.unlockedWeapons) && saved.inventory.unlockedWeapons.length > 0
                     ? [...new Set([...defaults.inventory.unlockedWeapons, ...saved.inventory.unlockedWeapons])]
                     : defaults.inventory.unlockedWeapons,
-                purchasedWeapons: Array.isArray(saved.inventory?.purchasedWeapons) && saved.inventory.purchasedWeapons.length > 0
-                    ? [...new Set(['flashlight_melee', 'pistol_9mm', ...saved.inventory.purchasedWeapons])]
-                    : defaults.inventory.purchasedWeapons,
+                purchasedWeapons: purchasedList,
+                loadout: sanitizedLoadout,
                 equippedWeapon: typeof saved.inventory?.equippedWeapon === 'string' &&
-                    saved.version === CURRENT_VERSION
+                    sanitizedLoadout.includes(saved.inventory.equippedWeapon)
                     ? saved.inventory.equippedWeapon
-                    : defaults.inventory.equippedWeapon,
+                    : (sanitizedLoadout.includes('pistol_9mm') ? 'pistol_9mm' : sanitizedLoadout[0]),
                 medkits: Number.isInteger(saved.inventory?.medkits) && saved.inventory.medkits >= 0
                     ? saved.inventory.medkits
                     : defaults.inventory.medkits,
@@ -266,6 +291,40 @@ export class SaveSystem {
             }
         }
         this.save();
+    }
+
+    getLives() {
+        return Number.isInteger(this.state.player.lives) ? this.state.player.lives : 3;
+    }
+
+    addLives(count = 1) {
+        const valid = Math.max(0, Math.floor(count));
+        if (valid === 0) return this.getLives();
+        this.state.player.lives = this.getLives() + valid;
+        this.save();
+        return this.state.player.lives;
+    }
+
+    loseLife() {
+        this.state.player.lives = Math.max(0, this.getLives() - 1);
+        this.save();
+        return this.state.player.lives;
+    }
+
+    /**
+     * Muerte permanente al agotar todas las vidas:
+     * Reinicia completamente niveles, armas compradas, dinero, puntos, mejoras y vidas,
+     * manteniendo únicamente el nombre del jugador y los ajustes de audio/controles.
+     */
+    resetGameOnPermadeath() {
+        const savedName = this.state.player.name || '';
+        const savedSettings = structuredClone(this.state.settings);
+        const fresh = createDefaultState();
+        fresh.player.name = savedName;
+        fresh.settings = savedSettings;
+        this.state = fresh;
+        this.save();
+        return this.state;
     }
 
     // --- Accesores de Configuración y Sonido ---

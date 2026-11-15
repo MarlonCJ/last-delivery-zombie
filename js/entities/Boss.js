@@ -24,7 +24,7 @@ export class Boss extends Enemy {
             aggroRange: 1200,
             patrolMinX: arenaMinX,
             patrolMaxX: arenaMaxX,
-            scoreReward: isTier2 ? 2400 : 1200,
+            scoreReward: 100,
             moneyReward: isTier2 ? 280 : 150,
             typeLabel: isTier2 ? 'PACIENTE CERO — ABERRACIÓN BIO-ÁCIDA' : 'MUTANTE DE LABORATORIO B-3'
         });

@@ -268,9 +268,15 @@
                             </div>
                         </div>
 
-                        <div class="phase-status-banner">
-                            <strong>DESPLIEGUE OPERATIVO HABILITADO:</strong>
-                            Completa el recorrido nocturno, recoge y entrega el paquete en la Zona Segura y neutraliza al Jefe Final para desbloquear y financiar nuevo armamento en la Tienda.
+                        <div class="briefing-box briefing-loadout-box">
+                            <div class="briefing-loadout-header">
+                                <h3>🎒 MOCHILA TÁCTICA — ELIGE TUS ARMAS (MÁX. 3 ANTES DE INICIAR)</h3>
+                                <span id="briefing-loadout-count" class="briefing-badge">2 / 3 EQUIPADAS</span>
+                            </div>
+                            <p class="briefing-loadout-hint">
+                                La asignación de las 3 armas solo puede realizarse antes de desplegar la misión. Haz clic sobre tus armas compradas para equiparlas o retirarlas:
+                            </p>
+                            <div id="briefing-loadout-grid" class="briefing-loadout-grid"></div>
                         </div>
 
                         <div class="briefing-actions">
@@ -313,8 +319,9 @@
                                     <div id="hud-health-text" class="hud-hp-label">100 / 100</div>
                                 </div>
                                 <div class="hud-economy-row">
+                                    <span class="hud-lives-val" title="Vidas disponibles (+1 cada 3000 pts)"><span id="hud-lives">♥♥♥ x3</span></span>
                                     <span class="hud-money-val">💵 <span id="hud-money">$0</span></span>
-                                    <span class="hud-score-val">★ Puntos: <span id="hud-score">0</span></span>
+                                    <span class="hud-score-val">★ <span id="hud-score">0</span></span>
                                 </div>
                             </div>
                         </div>
@@ -347,7 +354,7 @@
 
                     <!-- Esquina Inferior Izquierda: Recordatorio táctico -->
                     <div class="hud-bottom-left">
-                        [A/D] Mover &nbsp;|&nbsp; [Shift] Correr &nbsp;|&nbsp; [W/S] Escaleras / Saltar &nbsp;|&nbsp; [F] Atacar/Disparar &nbsp;|&nbsp; [R] Recargar &nbsp;|&nbsp; [E] Interactuar &nbsp;|&nbsp; [I] Equipo &nbsp;|&nbsp; [H] Botiquín
+                        [A/D] Mover / Empujar Cajas &nbsp;|&nbsp; [S] Agacharse &nbsp;|&nbsp; [C] Rodar &nbsp;|&nbsp; [W/Espacio] Saltar / Escaleras &nbsp;|&nbsp; [F] Disparar &nbsp;|&nbsp; [1-3/Q] 3 Armas &nbsp;|&nbsp; [E] Interactuar &nbsp;|&nbsp; [H] Botiquín
                     </div>
 
                     <!-- Esquina Inferior Derecha: Arma equipada, Munición y Botiquines -->
@@ -365,9 +372,9 @@
                     <!-- Panel de Inventario Rápido en Partida [Tecla I] -->
                     <div id="ingame-inventory-panel" class="ingame-modal-overlay hidden">
                         <div class="ingame-dialog-card">
-                            <h3 class="modal-title">MOCHILA DE EQUIPO E INVENTARIO</h3>
+                            <h3 class="modal-title">MOCHILA DE COMBATE (MÁX. 3 ARMAS)</h3>
                             <p style="font-size:13px; color:#9eb0c7; margin-top:4px;">
-                                Selecciona el arma activa o utiliza suministros médicos. También puedes alternar con las teclas <strong>[1-5]</strong> o <strong>[Q]</strong>.
+                                Alterna entre las <strong>3 armas asignadas antes de iniciar la misión</strong> con <strong>[1-3]</strong> o <strong>[Q]</strong>. (La selección de mochila está bloqueada durante el recorrido).
                             </p>
                             <div id="ingame-inventory-slots" class="inv-slots-grid"></div>
                             <div style="display:flex; justify-content:space-between; gap:10px; margin-top:14px;">
@@ -451,9 +458,14 @@
                                 <div class="intro-tag">ARMERÍA DEL REFUGIO CIVIL</div>
                                 <h2 class="modal-title">TIENDA DE EQUIPAMIENTO Y SUMINISTROS</h2>
                             </div>
-                            <div class="shop-currency-badge">
-                                <span>FONDOS DISPONIBLES:</span>
-                                <span id="shop-money-display">$0 USD</span>
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <div id="shop-loadout-summary" class="shop-currency-badge" style="border-color:#38e57d; color:#5cff9d; font-size:13px;">
+                                    🎒 MOCHILA: 2 / 3 ARMAS
+                                </div>
+                                <div class="shop-currency-badge">
+                                    <span>FONDOS DISPONIBLES:</span>
+                                    <span id="shop-money-display">$0 USD</span>
+                                </div>
                             </div>
                         </div>
 
@@ -484,26 +496,30 @@
                 </section>
 
                 <!-- =========================================================
-                     ESCENA 6: PANTALLA DE DERROTA (GAME OVER)
+                     ESCENA 6: PANTALLA DE DERROTA (GAME OVER — TRANSFORMACIÓN ZOMBIE Y RESETEO TOTAL)
                      ========================================================= -->
                 <section id="gameover-overlay" class="scene-overlay hidden" aria-label="Pantalla de Derrota">
                     <div class="ingame-modal-overlay">
-                        <div class="ingame-dialog-card" style="text-align:center;">
-                            <div class="standby-code">// SEÑAL VITAL PERDIDA //</div>
-                            <h2 class="modal-title" style="font-size:34px; color:#ff4755; margin:8px 0;">
-                                ENTREGA FALLIDA — HAS CAÍDO
+                        <div class="ingame-dialog-card" style="width:600px; text-align:center;">
+                            <div class="standby-code">// INFECCIÓN NEUROLÓGICA TERMINAL — 0 VIDAS RESTANTES //</div>
+                            <h2 class="modal-title" style="font-size:30px; color:#ff4755; margin:6px 0;">
+                                GAME OVER — CONVERTIDO EN ZOMBIE
                             </h2>
-                            <p style="font-size:15px; color:#d2deed; margin-bottom:10px;">
-                                El repartidor <strong id="gameover-courier-name">Alex</strong> fue superado por la horda en la zona de cuarentena.
+                            <canvas id="gameover-zombie-canvas" width="440" height="200" aria-label="Protagonista transformado en zombi" style="width:100%; max-width:440px; height:auto; border:2px solid #8a1623; border-radius:6px; background:#07050a; margin:8px auto 12px; display:block;"></canvas>
+                            <p style="font-size:14px; color:#d2deed; margin-bottom:8px;">
+                                El repartidor <strong id="gameover-courier-name">Alex</strong> agotó todas sus vidas y sucumbió al agente mutagénico B-3, uniéndose a la horda.
                             </p>
-                            <p id="gameover-stats-line" style="font-family:var(--font-mono); font-size:13px; color:#ffd166; margin-bottom:20px;"></p>
+                            <div id="gameover-reset-notice" style="padding:8px 12px; margin-bottom:10px; background:rgba(224,30,43,0.16); border:1px solid rgba(255,75,88,0.55); border-radius:4px; font-family:var(--font-mono); font-size:12px; color:#ff858f;">
+                                ☠ PARTIDA REINICIADA TOTALMENTE: Niveles, armas compradas, mejoras y dinero han vuelto a cero.
+                            </div>
+                            <p id="gameover-stats-line" style="font-family:var(--font-mono); font-size:13px; color:#ffd166; margin-bottom:16px;"></p>
 
                             <div style="display:flex; justify-content:center; gap:14px;">
                                 <button id="btn-gameover-menu" type="button" class="secondary-action-btn">
                                     ⬅ MENÚ PRINCIPAL
                                 </button>
                                 <button id="btn-gameover-retry" type="button" class="intro-nav-btn primary">
-                                    ↺ REINTENTAR NIVEL [ENTER]
+                                    ↺ VOLVER A JUGAR DESDE CERO [ENTER]
                                 </button>
                             </div>
                         </div>
@@ -557,6 +573,18 @@
                                         <span id="howto-key-inventory" class="keycap-badge">I</span>
                                     </div>
                                     <div class="control-card">
+                                        <span class="control-action-name">Agacharse / Cubrirse de proyectiles</span>
+                                        <span class="keycap-badge">S / ↓</span>
+                                    </div>
+                                    <div class="control-card">
+                                        <span class="control-action-name">Esquivar / Rodar tácticamente</span>
+                                        <span class="keycap-badge">C / CTRL</span>
+                                    </div>
+                                    <div class="control-card">
+                                        <span class="control-action-name">Empujar cajas móviles</span>
+                                        <span class="keycap-badge">AVANZAR CONTRA CAJA</span>
+                                    </div>
+                                    <div class="control-card">
                                         <span class="control-action-name">Pausar la partida</span>
                                         <span id="howto-key-pause" class="keycap-badge">ESC</span>
                                     </div>
@@ -578,12 +606,19 @@
                                         <p>Completa entregas exitosas, cobra la recompensa económica de cada misión y elimina zombis especiales que sueltan divisas adicionales para la tienda.</p>
                                     </article>
                                     <article class="guide-card">
-                                        <h4>⭐ Cómo conseguir puntos</h4>
-                                        <p>Obtén puntos al neutralizar infectados, cumplir objetivos principales y mantener un buen tiempo de recorrido. Sirven para evaluar tu rendimiento global.</p>
+                                        <h4>❤️ 3 Vidas, Checkpoints y Permadeath</h4>
+                                        <p>Dispones de <strong>3 vidas</strong>. Si mueres, reapareces en el último <strong>Checkpoint</strong> alcanzado. Ganas <strong>+1 vida extra cada 3,000 puntos</strong>. Si pierdes todas tus vidas, te transformas en zombi y el juego se reinicia por completo (niveles, armas y dinero).</p>
                                     </article>
                                     <article class="guide-card">
-                                        <h4>🔫 Cómo utilizar armas</h4>
-                                        <p>Ataca o dispara con tu arma activa, vigila la capacidad del cargador y recarga en zonas despejadas. Desbloquea y compra mejor armamento en la tienda entre niveles.</p>
+                                        <h4>🎒 Mochila de 3 Armas Pre-Partida</h4>
+                                        <p>Una vez compradas las armas en la Tienda, solo puedes llevar un máximo de <strong>3 armas equipadas</strong>, y su asignación <strong>solo se puede hacer antes de iniciar el nivel</strong>.</p>
+                                    </article>
+                                    <article class="guide-card" style="grid-column: span 2;">
+                                        <h4>⭐ Tabla Oficial de Puntos por Especie de Zombi</h4>
+                                        <p style="font-family:var(--font-mono); font-size:12px; line-height:1.6;">
+                                            01. Caminante: <strong>10 pts</strong> &nbsp;|&nbsp; 02. Corredor: <strong>25 pts</strong> &nbsp;|&nbsp; 03. Resistente: <strong>35 pts</strong> &nbsp;|&nbsp; 04. Vomitador: <strong>40 pts</strong><br>
+                                            05. Bombero: <strong>45 pts</strong> &nbsp;|&nbsp; 06. Blindado: <strong>60 pts</strong> &nbsp;|&nbsp; 07. Saltador: <strong>60 pts</strong> &nbsp;|&nbsp; 08. Bruto Mutante: <strong>65 pts</strong> &nbsp;|&nbsp; Zombie Boss: <strong>100 pts</strong>
+                                        </p>
                                     </article>
                                     <article class="guide-card">
                                         <h4>🧟 Cómo evitar enemigos</h4>

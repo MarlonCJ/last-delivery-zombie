@@ -18,9 +18,9 @@ export const LEVEL_MANIFEST = Object.freeze([
             'Cruzar las calles infestadas y transportar la carga intacta.',
             'Entregar el paquete en la Zona Segura y derrotar al Jefe Final.'
         ],
-        enemies: ['Zombi Normal', 'Jefe de Distrito (Boss Final)'],
+        enemies: ['Zombi Caminante (10 pts)', 'Zombi Corredor (25 pts)', 'Zombi Resistente (35 pts)', 'Zombi Vomitador (40 pts)', 'Zombi Bombero (45 pts)', 'Zombi Blindado (60 pts)', 'Boss Mutante (100 pts)'],
         baseMoneyReward: 250,
-        baseScoreReward: 1000
+        baseScoreReward: 0
     },
     {
         id: 2,
@@ -33,12 +33,12 @@ export const LEVEL_MANIFEST = Object.freeze([
         deliveryPoint: 'Unidad de Aislamiento',
         objectives: [
             'Recuperar el suero estabilizador.',
-            'Sobrevivir a los infectados rápidos.',
-            'Completar la entrega y neutralizar la mutación alfa.'
+            'Sobrevivir a los infectados de élite y mutantes.',
+            'Completar la entrega y neutralizar al Paciente Cero.'
         ],
-        enemies: ['Zombi Normal', 'Zombi Rápido', 'Zombi Especial', 'Paciente Cero (Boss)'],
+        enemies: ['Caminante (10)', 'Corredor (25)', 'Resistente (35)', 'Vomitador (40)', 'Bombero (45)', 'Blindado (60)', 'Saltador (60)', 'Bruto Mutante (65)', 'Paciente Cero Boss (100 pts)'],
         baseMoneyReward: 450,
-        baseScoreReward: 2000
+        baseScoreReward: 0
     },
     {
         id: 3,
@@ -54,9 +54,9 @@ export const LEVEL_MANIFEST = Object.freeze([
             'Sortear fugas químicas y criaturas mutantes.',
             'Derrotar a la Aberración Biogen en la plataforma de salida.'
         ],
-        enemies: ['Zombi Rápido', 'Zombi Especial', 'Mutante B-3', 'Aberración Biogen (Boss)'],
+        enemies: ['Blindado (60)', 'Saltador (60)', 'Bruto Mutante (65)', 'Aberración Biogen Boss (100 pts)'],
         baseMoneyReward: 800,
-        baseScoreReward: 4000
+        baseScoreReward: 0
     }
 ]);
 

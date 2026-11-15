@@ -1,9 +1,9 @@
 /**
  * BriefingScene.js
- * Terminal de Despacho Pre-Misión (cierre limpio de Fase 1 y Fase 2).
- * Muestra la ficha personalizada del protagonista con los datos reales de
- * SaveSystem y LevelSystem, dejando el punto de conexión exacto para el Nivel 01
- * en las Fases 3 y 4 sin simular mecánicas aún no implementadas.
+ * Terminal de Despacho Pre-Misión.
+ * Muestra la ficha personalizada del protagonista, objetivos de nivel y el
+ * Selector de Mochila Táctica (máx. 3 armas compradas), cuya asignación solo
+ * puede realizarse antes de iniciar la misión.
  */
 
 export class BriefingScene {
@@ -19,6 +19,9 @@ export class BriefingScene {
         this.missionRewardEl = document.getElementById('briefing-mission-reward');
         this.objectivesListEl = document.getElementById('briefing-objectives-list');
 
+        this.loadoutCountEl = document.getElementById('briefing-loadout-count');
+        this.loadoutGridEl = document.getElementById('briefing-loadout-grid');
+
         this.btnPlayLevel = document.getElementById('btn-briefing-play');
         this.btnOpenShop = document.getElementById('btn-briefing-shop');
         this.btnReplayIntro = document.getElementById('btn-briefing-replay');
@@ -32,7 +35,15 @@ export class BriefingScene {
     }
 
     _bindEvents() {
-        const btns = [this.btnPlayLevel, this.btnOpenShop, this.btnReplayIntro, this.btnOpenOptions, this.btnBackMenu, this.btnLvl1, this.btnLvl2];
+        const btns = [
+            this.btnPlayLevel,
+            this.btnOpenShop,
+            this.btnReplayIntro,
+            this.btnOpenOptions,
+            this.btnBackMenu,
+            this.btnLvl1,
+            this.btnLvl2
+        ];
         for (const btn of btns) {
             btn?.addEventListener('pointerenter', () => this.engine.audio.playHover());
         }
@@ -68,12 +79,12 @@ export class BriefingScene {
                 return;
             }
             this.engine.audio.playClick();
-            this.engine.sceneManager.transitionTo('shop', {}, 0.45);
+            this.engine.sceneManager.transitionTo('shop', { nextScene: 'briefing' }, 0.45);
         });
 
         this.btnReplayIntro?.addEventListener('click', () => {
             this.engine.audio.playClick();
-            this.engine.sceneManager.transitionTo('introduction', {}, 0.45);
+            this.engine.sceneManager.transitionTo('introduction', { targetScene: 'briefing' }, 0.45);
         });
 
         this.btnOpenOptions?.addEventListener('click', () => {
@@ -112,7 +123,8 @@ export class BriefingScene {
             this.missionRouteEl.textContent = `${level.pickupPoint}  ➔  ${level.deliveryPoint}`;
         }
         if (this.missionRewardEl) {
-            this.missionRewardEl.textContent = `$${level.baseMoneyReward} USD  |  +${level.baseScoreReward} PTS`;
+            const lives = this.engine.saveSystem.getLives();
+            this.missionRewardEl.textContent = `$${level.baseMoneyReward} USD  |  ♥ ${lives} Vidas (+1 cada 3,000 PTS)`;
         }
         if (this.objectivesListEl) {
             this.objectivesListEl.innerHTML = '';
@@ -127,6 +139,76 @@ export class BriefingScene {
         }
     }
 
+    _renderLoadoutSelector() {
+        if (!this.loadoutGridEl) return;
+        this.loadoutGridEl.innerHTML = '';
+
+        const purchased = this.engine.inventory.getPurchasedWeapons();
+        const loadout = this.engine.inventory.getLoadout();
+        const loadoutIds = loadout.map(w => w.id);
+
+        if (this.loadoutCountEl) {
+            this.loadoutCountEl.textContent = `${loadoutIds.length} / 3 EQUIPADAS`;
+        }
+
+        const atlas = this.engine.spriteAtlas;
+
+        for (const w of purchased) {
+            const slotIndex = loadoutIds.indexOf(w.id);
+            const inLoadout = slotIndex !== -1;
+
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = `loadout-weapon-chip ${inLoadout ? 'in-loadout' : ''}`;
+
+            chip.innerHTML = `
+                <canvas width="136" height="44" aria-hidden="true"></canvas>
+                <span class="loadout-chip-name">${w.shortName}</span>
+                <span class="loadout-chip-status">${inLoadout ? `✓ SLOT [${slotIndex + 1}]` : '+ EQUIPAR'}</span>
+            `;
+
+            const cnv = chip.querySelector('canvas');
+            const cctx = cnv?.getContext?.('2d');
+            if (cctx) {
+                cctx.clearRect(0, 0, cnv.width, cnv.height);
+                if (atlas?.getExtImage() && w.spriteKey) {
+                    const meta = atlas.getSpriteMeta(w.spriteKey);
+                    const aspect = meta ? (meta.w / Math.max(1, meta.h)) : 2.2;
+                    const drawH = Math.min(34, Math.round(112 / Math.max(1.2, aspect)));
+                    const drawW = Math.min(124, Math.round(drawH * aspect));
+                    atlas.drawSprite(
+                        cctx,
+                        w.spriteKey,
+                        Math.round((cnv.width - drawW) * 0.5),
+                        Math.round((cnv.height - drawH) * 0.5),
+                        drawW,
+                        drawH
+                    );
+                } else {
+                    cctx.fillStyle = inLoadout ? '#38e57d' : '#8fa4bd';
+                    cctx.font = 'bold 11px Consolas, monospace';
+                    cctx.fillText(w.shortName, 18, 26);
+                }
+            }
+
+            chip.addEventListener('click', () => {
+                const res = this.engine.inventory.toggleLoadoutWeapon(w.id);
+                if (res.ok) {
+                    this.engine.audio.playPickup();
+                } else {
+                    this.engine.audio.playError();
+                }
+                if (this.loadoutCountEl && !res.ok) {
+                    this.loadoutCountEl.textContent = res.message;
+                } else {
+                    this._renderLoadoutSelector();
+                }
+            });
+
+            this.loadoutGridEl.appendChild(chip);
+        }
+    }
+
     enter(params = {}) {
         this.time = 0;
         const playerName = this.engine.saveSystem.getPlayerName() || 'Repartidor';
@@ -136,6 +218,7 @@ export class BriefingScene {
 
         const initialLvl = params.levelId || (this.engine.saveSystem.state.player.completedLevels.includes(1) ? 2 : 1);
         this._selectLevel(initialLvl);
+        this._renderLoadoutSelector();
 
         if (this.btnOpenShop) {
             const shopUnlocked = this.engine.shop.isShopAvailable();
@@ -168,19 +251,16 @@ export class BriefingScene {
         const ctx = renderer.ctx;
         renderer.clear('#070b12');
 
-        // Fondo de refugio de despacho con ventanal lluvioso al exterior
         ctx.fillStyle = '#0c1522';
         ctx.fillRect(140, 70, 1000, 340);
         renderer.drawRain(false);
 
-        // Marco interior blindado del búnker de reparto
         ctx.fillStyle = '#080c13';
         ctx.fillRect(0, 0, 1280, 85);
         ctx.fillRect(0, 385, 1280, 335);
         ctx.fillRect(0, 0, 165, 720);
         ctx.fillRect(1115, 0, 165, 720);
 
-        // Barrotes de seguridad en ventana
         ctx.strokeStyle = '#182230';
         ctx.lineWidth = 6;
         for (let x = 280; x <= 1000; x += 180) {
@@ -190,7 +270,6 @@ export class BriefingScene {
             ctx.stroke();
         }
 
-        // Tubo fluorescente superior con leve parpadeo eléctrico
         const flicker = Math.sin(this.time * 19) > 0.94 ? 0.55 : 1.0;
         ctx.fillStyle = `rgba(185, 235, 255, ${(0.85 * flicker).toFixed(2)})`;
         ctx.fillRect(450, 42, 380, 8);

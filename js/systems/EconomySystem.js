@@ -47,7 +47,30 @@ export class EconomySystem {
         if (this.saveSystem.state.economy.score > this.saveSystem.state.economy.highScore) {
             this.saveSystem.state.economy.highScore = this.saveSystem.state.economy.score;
         }
+
+        // Cada 3000 puntos acumulados otorga +1 vida extra al jugador
+        let livesGained = 0;
+        if (!Number.isFinite(this.saveSystem.state.player.nextLifeScore) || this.saveSystem.state.player.nextLifeScore < 3000) {
+            this.saveSystem.state.player.nextLifeScore = (Math.floor((this.saveSystem.state.economy.score - validPoints) / 3000) + 1) * 3000;
+        }
+        while (this.saveSystem.state.economy.score >= this.saveSystem.state.player.nextLifeScore) {
+            this.saveSystem.state.player.lives = Math.max(1, (this.saveSystem.state.player.lives || 0)) + 1;
+            this.saveSystem.state.player.nextLifeScore += 3000;
+            livesGained++;
+        }
+
         this.saveSystem.save();
+
+        if (livesGained > 0 && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('ldz:extra-life', {
+                detail: {
+                    livesGained,
+                    totalLives: this.saveSystem.state.player.lives,
+                    score: this.saveSystem.state.economy.score
+                }
+            }));
+        }
+
         return this.getScore();
     }
 }

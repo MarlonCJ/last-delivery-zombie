@@ -1,10 +1,10 @@
 /**
  * Level01.js
  * Primer Nivel Jugable Extendido: "PRIMERA ENTREGA" (10,400 px — 4 Sectores Urbanos).
- * Escenario urbano nocturno HD con profundidad multicapa 2.5D (5 planos de parallax),
- * fondo ilustrado city_street_hd.png a pantalla completa sin cortes, puestos de control
- * intermedios, pasarelas dobles escalables, cajas destructibles, barriles explosivos,
- * 4 variantes de infectados y Jefe Final (Mutante de Laboratorio B-3).
+ * Escenario urbano nocturno HD con profundidad simétrica 2.5D, vehículos y objetos
+ * renderizados 100% mediante sprites pixel-art HD (ambulancias, patrullas, taxis, camiones,
+ * andamios, generadores, consolas, paradas de autobús, cajas empujables, VFX en sprites),
+ * sistema de 3 vidas con reaparición en Checkpoints, vida extra cada 3,000 pts y 8 tipos de zombis.
  */
 
 import { Camera2D } from '../core/Camera2D.js';
@@ -30,19 +30,19 @@ export class Level01 {
         this.boss = null;
         this.platforms = [];
         this.ladders = [];
+        this.movableCrates = [];
         this.destructibles = [];
         this.hazards = [];
         this.checkpoints = [];
         this.sectorSigns = [];
         this.scenicProps = [];
         this.streetLamps = [];
-        this.foregroundPillars = [];
         this.pickups = [];
         this.combat = null;
 
-        // Puntos clave de la misión de reparto con escala simétrica respecto al jugador (120 px)
-        this.pickupStation = { x: 220, y: GROUND_Y - 124, width: 118, height: 124 };
-        this.deliveryStation = { x: 9280, y: GROUND_Y - 136, width: 138, height: 136 };
+        // Puntos clave de la misión de reparto con sprites reales (parada urbana + palé/consola)
+        this.pickupStation = { x: 205, y: GROUND_Y - 124, width: 168, height: 124 };
+        this.deliveryStation = { x: 9240, y: GROUND_Y - 128, width: 176, height: 128 };
         this._streetTileCanvas = null;
 
         // Estadísticas de la partida actual
@@ -52,16 +52,32 @@ export class Level01 {
         this.scoreEarnedInRun = 0;
         this.startMoneySnapshot = 0;
         this.startScoreSnapshot = 0;
+        this.lastCheckpointX = 80;
 
         // Estados de control de escena
         this.paused = false;
         this.inventoryOpen = false;
         this.levelCompleted = false;
         this.defeatTimer = 0;
+        this.gameOverTriggered = false;
         this.bossSpawned = false;
         this.arenaLocked = false;
         this.time = 0;
         this._lastAvatarKey = '';
+
+        this._onExtraLife = (e) => {
+            if (!this.isSceneActive || !this.player) return;
+            const total = e?.detail?.totalLives ?? this.engine.saveSystem.getLives();
+            this.engine.audio.playExtraLife?.();
+            this.camera.shake(6, 0.22);
+            this.combat?.spawnFloatingText(
+                this.player.x - 24,
+                this.player.y - 34,
+                `★ ¡+1 VIDA EXTRA POR 3000 PTS! (VIDAS: ${total})`,
+                '#ffd166'
+            );
+            this._syncHud();
+        };
 
         this._cacheDomElements();
         this._bindHudEvents();
@@ -72,6 +88,7 @@ export class Level01 {
         this.hudMissionHeader = document.getElementById('hud-mission-header');
         this.hudAvatarCanvas = document.getElementById('hud-avatar-canvas');
         this.hudPlayerName = document.getElementById('hud-player-name');
+        this.hudLives = document.getElementById('hud-lives');
         this.hudHealthFill = document.getElementById('hud-health-fill');
         this.hudHealthText = document.getElementById('hud-health-text');
         this.hudMoney = document.getElementById('hud-money');
@@ -159,14 +176,14 @@ export class Level01 {
             if (!this.isSceneActive) return;
             this.engine.audio.playClick();
             this.victoryPanel?.classList.add('hidden');
-            this.engine.sceneManager.transitionTo('shop', { fromLevel: 1, nextScene: 'level02' }, 0.45);
+            this.engine.sceneManager.transitionTo('shop', { fromLevel: 1, nextScene: 'briefing' }, 0.45);
         });
 
         this.btnVictoryContinue?.addEventListener('click', () => {
             if (!this.isSceneActive) return;
             this.engine.audio.playConfirm();
             this.victoryPanel?.classList.add('hidden');
-            this.engine.sceneManager.transitionTo('level02', {}, 0.45);
+            this.engine.sceneManager.transitionTo('briefing', { levelId: 2 }, 0.45);
         });
     }
 
@@ -179,10 +196,14 @@ export class Level01 {
         this.inventoryOpen = false;
         this.levelCompleted = false;
         this.defeatTimer = 0;
+        this.gameOverTriggered = false;
         this.bossSpawned = false;
         this.arenaLocked = false;
         this.boss = null;
+        this.lastCheckpointX = 80;
         this._lastAvatarKey = '';
+
+        window.addEventListener('ldz:extra-life', this._onExtraLife);
 
         if (this.hudMissionHeader) {
             this.hudMissionHeader.textContent = '🎯 MISIÓN 01: PRIMERA ENTREGA';
@@ -191,7 +212,7 @@ export class Level01 {
             this.victoryMissionTitle.textContent = '¡MISIÓN COMPLETADA: PRIMERA ENTREGA!';
         }
         if (this.btnVictoryContinue) {
-            this.btnVictoryContinue.textContent = 'CONTINUAR AL NIVEL 02 ▶';
+            this.btnVictoryContinue.textContent = 'PREPARAR ARMAS — NIVEL 02 ▶';
         }
 
         this.engine.inventory.resetMissionLoadout();
@@ -206,6 +227,7 @@ export class Level01 {
             audio: this.engine.audio,
             economy: this.engine.economy,
             camera: this.camera,
+            spriteAtlas: this.engine.spriteAtlas,
             onEnemyKilled: (enemy) => {
                 if (!enemy.isBoss) {
                     this.zombiesKilled += 1;
@@ -215,10 +237,12 @@ export class Level01 {
             },
             onCrateBroken: (crate, cx, cy) => {
                 if (crate.loot === 'money') {
-                    this.engine.economy.addMoney(20);
-                    this.combat.spawnFloatingText(cx - 16, cy - 12, '+$20 BOTÍN', '#47ff8c');
+                    this.engine.economy.addMoney(25);
+                    this.combat.spawnFloatingText(cx - 16, cy - 12, '+$25 BOTÍN', '#47ff8c');
                 } else {
-                    this.engine.inventory.addAmmo('pistol_9mm', 14);
+                    const equipped = this.engine.inventory.getEquippedWeapon();
+                    const wId = equipped.type === 'ranged' ? equipped.id : 'pistol_9mm';
+                    this.engine.inventory.addAmmo(wId, 14);
                     this.combat.spawnFloatingText(cx - 24, cy - 12, '+14 MUNICIÓN', '#ffd166');
                 }
                 this.engine.audio.playPickup();
@@ -238,6 +262,7 @@ export class Level01 {
 
     exit() {
         this.isSceneActive = false;
+        window.removeEventListener('ldz:extra-life', this._onExtraLife);
         this.hudOverlay?.classList.add('hidden');
         this.inventoryPanel?.classList.add('hidden');
         this.pausePanel?.classList.add('hidden');
@@ -245,154 +270,165 @@ export class Level01 {
     }
 
     _buildWorldGeometry() {
-        // Suelo principal y plataformas tácticas multinivel a lo largo de los 4 sectores (10,400 px)
+        // Suelo principal + andamios escalables (prop_scaffold) + vehículos HD escalables (veh_ambulance, veh_police, veh_taxi, veh_truck)
         this.platforms = [
             { x: 0, y: GROUND_Y, width: WORLD_WIDTH, height: 150, kind: 'ground', oneWay: false },
 
             // SECTOR 1 (0 - 2700): Avenida Sur y Minimarket
-            { x: 585, y: GROUND_Y - 52, width: 98, height: 52, kind: 'barrier_concrete', oneWay: false },
-            { x: 735, y: GROUND_Y - 148, width: 265, height: 18, kind: 'rooftop_walkway', oneWay: true },
-            { x: 1150, y: GROUND_Y - 66, width: 72, height: 66, kind: 'metal_crate', oneWay: false },
-            { x: 1475, y: GROUND_Y - 154, width: 285, height: 18, kind: 'rooftop_walkway', oneWay: true },
-            { x: 1895, y: GROUND_Y - 52, width: 98, height: 52, kind: 'barrier_concrete', oneWay: false },
-            { x: 2150, y: GROUND_Y - 96, width: 205, height: 96, kind: 'ambulance', oneWay: false },
-            { x: 2430, y: GROUND_Y - 156, width: 260, height: 18, kind: 'rooftop_walkway', oneWay: true },
+            { x: 585, y: GROUND_Y - 52, width: 102, height: 52, kind: 'barrier_concrete', oneWay: false },
+            { x: 735, y: GROUND_Y - 148, width: 268, height: 18, drawH: 148, kind: 'scaffold', oneWay: true },
+            { x: 1150, y: GROUND_Y - 64, width: 72, height: 64, kind: 'metal_crate', oneWay: false },
+            { x: 1475, y: GROUND_Y - 152, width: 286, height: 18, drawH: 152, kind: 'scaffold', oneWay: true },
+            { x: 1895, y: GROUND_Y - 52, width: 102, height: 52, kind: 'barrier_red', oneWay: false },
+            { x: 2135, y: GROUND_Y - 98, width: 232, height: 18, drawH: 102, kind: 'veh_ambulance', oneWay: true },
+            { x: 2430, y: GROUND_Y - 154, width: 262, height: 18, drawH: 154, kind: 'scaffold', oneWay: true },
 
-            // SECTOR 2 (2700 - 5600): Paso Elevado Comercial en Llamas (doble altura)
-            { x: 2940, y: GROUND_Y - 66, width: 72, height: 66, kind: 'metal_crate', oneWay: false },
-            { x: 3180, y: GROUND_Y - 152, width: 260, height: 18, kind: 'rooftop_walkway', oneWay: true },
-            { x: 3720, y: GROUND_Y - 52, width: 98, height: 52, kind: 'barrier_concrete', oneWay: false },
-            { x: 4050, y: GROUND_Y - 150, width: 310, height: 18, kind: 'rooftop_walkway', oneWay: true },
-            { x: 4220, y: GROUND_Y - 276, width: 240, height: 18, kind: 'rooftop_walkway', oneWay: true },
-            { x: 4680, y: GROUND_Y - 96, width: 205, height: 96, kind: 'ambulance', oneWay: false },
-            { x: 5040, y: GROUND_Y - 156, width: 290, height: 18, kind: 'rooftop_walkway', oneWay: true },
-            { x: 5460, y: GROUND_Y - 52, width: 98, height: 52, kind: 'barrier_concrete', oneWay: false },
+            // SECTOR 2 (2700 - 5600): Paso Elevado Comercial en Llamas
+            { x: 2940, y: GROUND_Y - 64, width: 72, height: 64, kind: 'metal_crate', oneWay: false },
+            { x: 3180, y: GROUND_Y - 150, width: 262, height: 18, drawH: 150, kind: 'scaffold', oneWay: true },
+            { x: 3610, y: GROUND_Y - 76, width: 214, height: 18, drawH: 80, kind: 'veh_taxi', oneWay: true },
+            { x: 4050, y: GROUND_Y - 150, width: 312, height: 18, drawH: 150, kind: 'scaffold', oneWay: true },
+            { x: 4220, y: GROUND_Y - 274, width: 238, height: 18, drawH: 124, kind: 'scaffold', oneWay: true },
+            { x: 4660, y: GROUND_Y - 94, width: 222, height: 18, drawH: 98, kind: 'veh_police', oneWay: true },
+            { x: 5040, y: GROUND_Y - 154, width: 290, height: 18, drawH: 154, kind: 'scaffold', oneWay: true },
+            { x: 5460, y: GROUND_Y - 52, width: 102, height: 52, kind: 'barrier_concrete', oneWay: false },
 
             // SECTOR 3 (5600 - 8900): Cordón Militar de Cuarentena Biogen
-            { x: 5840, y: GROUND_Y - 66, width: 72, height: 66, kind: 'metal_crate', oneWay: false },
-            { x: 6120, y: GROUND_Y - 154, width: 295, height: 18, kind: 'rooftop_walkway', oneWay: true },
-            { x: 6620, y: GROUND_Y - 52, width: 98, height: 52, kind: 'barrier_concrete', oneWay: false },
-            { x: 7140, y: GROUND_Y - 150, width: 320, height: 18, kind: 'rooftop_walkway', oneWay: true },
-            { x: 7310, y: GROUND_Y - 274, width: 235, height: 18, kind: 'rooftop_walkway', oneWay: true },
-            { x: 7770, y: GROUND_Y - 96, width: 205, height: 96, kind: 'ambulance', oneWay: false },
-            { x: 8160, y: GROUND_Y - 154, width: 280, height: 18, kind: 'rooftop_walkway', oneWay: true },
-            { x: 8640, y: GROUND_Y - 66, width: 72, height: 66, kind: 'metal_crate', oneWay: false },
-            { x: 8890, y: GROUND_Y - 52, width: 98, height: 52, kind: 'barrier_concrete', oneWay: false },
+            { x: 5840, y: GROUND_Y - 64, width: 72, height: 64, kind: 'metal_crate', oneWay: false },
+            { x: 6120, y: GROUND_Y - 152, width: 296, height: 18, drawH: 152, kind: 'scaffold', oneWay: true },
+            { x: 6560, y: GROUND_Y - 106, width: 256, height: 18, drawH: 110, kind: 'veh_truck', oneWay: true },
+            { x: 7140, y: GROUND_Y - 150, width: 320, height: 18, drawH: 150, kind: 'scaffold', oneWay: true },
+            { x: 7310, y: GROUND_Y - 274, width: 235, height: 18, drawH: 124, kind: 'scaffold', oneWay: true },
+            { x: 7755, y: GROUND_Y - 98, width: 232, height: 18, drawH: 102, kind: 'veh_ambulance', oneWay: true },
+            { x: 8160, y: GROUND_Y - 152, width: 282, height: 18, drawH: 152, kind: 'scaffold', oneWay: true },
+            { x: 8640, y: GROUND_Y - 64, width: 72, height: 64, kind: 'metal_crate', oneWay: false },
+            { x: 8890, y: GROUND_Y - 52, width: 102, height: 52, kind: 'barrier_red', oneWay: false },
 
             // SECTOR 4 (9040 - 10400): Refugio Norte y Arena del Mutante B-3
-            { x: 9480, y: GROUND_Y - 144, width: 215, height: 18, kind: 'rooftop_walkway', oneWay: true },
-            { x: 9920, y: GROUND_Y - 144, width: 215, height: 18, kind: 'rooftop_walkway', oneWay: true }
+            { x: 9480, y: GROUND_Y - 144, width: 218, height: 18, drawH: 144, kind: 'scaffold', oneWay: true },
+            { x: 9920, y: GROUND_Y - 144, width: 218, height: 18, drawH: 144, kind: 'scaffold', oneWay: true }
         ];
 
-        // Escaleras verticales escalables ([W] / [S]) incluyendo tramos a segundo piso
+        // Cajas móviles / empujables por el protagonista (animación player_push + soporte de salto/cobertura)
+        this.movableCrates = [
+            { x: 465, y: GROUND_Y - 56, width: 56, height: 56, vx: 0, vy: 0, sprite: 'prop_crate_wood_hd' },
+            { x: 1335, y: GROUND_Y - 56, width: 56, height: 56, vx: 0, vy: 0, sprite: 'prop_crate_metal_hd' },
+            { x: 2815, y: GROUND_Y - 56, width: 56, height: 56, vx: 0, vy: 0, sprite: 'prop_crate_wood_hd' },
+            { x: 3930, y: GROUND_Y - 56, width: 56, height: 56, vx: 0, vy: 0, sprite: 'prop_crate_wood_hd' },
+            { x: 5945, y: GROUND_Y - 56, width: 56, height: 56, vx: 0, vy: 0, sprite: 'prop_crate_metal_hd' },
+            { x: 7590, y: GROUND_Y - 56, width: 56, height: 56, vx: 0, vy: 0, sprite: 'prop_crate_wood_hd' },
+            { x: 9395, y: GROUND_Y - 56, width: 56, height: 56, vx: 0, vy: 0, sprite: 'prop_crate_metal_hd' }
+        ];
+
+        // Escaleras verticales escalables ([W] / [S]) con animación trasera HD player_climb_back
         this.ladders = [
             { x: 748, y: GROUND_Y - 148, width: 38, height: 148 },
-            { x: 1490, y: GROUND_Y - 154, width: 38, height: 154 },
-            { x: 2445, y: GROUND_Y - 160, width: 38, height: 160 },
-            { x: 3195, y: GROUND_Y - 152, width: 38, height: 152 },
+            { x: 1490, y: GROUND_Y - 152, width: 38, height: 152 },
+            { x: 2445, y: GROUND_Y - 154, width: 38, height: 154 },
+            { x: 3195, y: GROUND_Y - 150, width: 38, height: 150 },
             { x: 4070, y: GROUND_Y - 150, width: 38, height: 150 },
-            { x: 4240, y: GROUND_Y - 276, width: 38, height: 128 },
-            { x: 5060, y: GROUND_Y - 158, width: 38, height: 158 },
-            { x: 6140, y: GROUND_Y - 156, width: 38, height: 156 },
+            { x: 4240, y: GROUND_Y - 274, width: 38, height: 126 },
+            { x: 5060, y: GROUND_Y - 154, width: 38, height: 154 },
+            { x: 6140, y: GROUND_Y - 152, width: 38, height: 152 },
             { x: 7160, y: GROUND_Y - 150, width: 38, height: 150 },
             { x: 7330, y: GROUND_Y - 274, width: 38, height: 126 },
-            { x: 8180, y: GROUND_Y - 156, width: 38, height: 156 },
+            { x: 8180, y: GROUND_Y - 152, width: 38, height: 152 },
             { x: 9498, y: GROUND_Y - 144, width: 38, height: 144 },
             { x: 10080, y: GROUND_Y - 144, width: 38, height: 144 }
         ];
 
-        // Puestos de Control Intermedios (restauran salud parcial y munición al cruzarlos)
+        // Puestos de Control Intermedios (guardan punto de reaparición de vidas!)
         this.checkpoints = [
-            { x: 3520, y: GROUND_Y - 102, width: 78, height: 102, label: 'CONTROL ALFA', reached: false },
-            { x: 6840, y: GROUND_Y - 102, width: 78, height: 102, label: 'CONTROL BRAVO', reached: false }
+            { x: 3480, y: GROUND_Y - 96, width: 124, height: 96, label: 'CONTROL ALFA', reached: false },
+            { x: 6850, y: GROUND_Y - 96, width: 124, height: 96, label: 'CONTROL BRAVO', reached: false }
         ];
 
-        // Carteles urbanos de referencia por distrito
+        // Señalización urbana real con sprites HD (prop_sign_street, prop_traffic_light, prop_sign_stop)
         this.sectorSigns = [
-            { x: 410, title: 'SECTOR 01', sub: 'AVENIDA SUR' },
-            { x: 2820, title: 'SECTOR 02', sub: 'DISTRITO COMERCIAL' },
-            { x: 5710, title: 'SECTOR 03', sub: 'CORDÓN DE CUARENTENA' },
-            { x: 9100, title: 'SECTOR 04', sub: 'ZONA SEGURA NORTE' }
+            { x: 410, title: 'SECTOR 01', sub: 'AVENIDA SUR', sprite: 'prop_sign_street', w: 54, h: 104 },
+            { x: 2770, title: 'SECTOR 02', sub: 'DISTRITO COMERCIAL', sprite: 'prop_traffic_light', w: 38, h: 112 },
+            { x: 5710, title: 'SECTOR 03', sub: 'CORDÓN BIOGEN', sprite: 'prop_sign_stop', w: 52, h: 106 },
+            { x: 9105, title: 'SECTOR 04', sub: 'REFUGIO NORTE', sprite: 'prop_sign_street', w: 54, h: 104 }
         ];
 
-        // Cajas de madera destructibles y Barriles Rojos Explosivos (18 en total)
+        // Cajas de madera destructibles, barriles explosivos y vehículos incendiables (vfx_car_explosion)
         this.destructibles = [
             { x: 686, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'money', destroyed: false },
             { x: 955, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
             { x: 1620, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false },
             { x: 1730, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
             { x: 2580, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'money', destroyed: false },
-            { x: 3060, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
-            { x: 3890, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false },
+            { x: 3025, y: GROUND_Y - 72, width: 196, height: 72, kind: 'vehicle_wreck', sprite: 'veh_car', hp: 70, destroyed: false },
+            { x: 3850, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false },
             { x: 4460, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
             { x: 4930, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'money', destroyed: false },
             { x: 5340, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
-            { x: 6010, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false },
-            { x: 6440, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
+            { x: 6025, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false },
+            { x: 6390, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
             { x: 7020, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'money', destroyed: false },
-            { x: 7620, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
-            { x: 8060, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false },
+            { x: 8045, y: GROUND_Y - 72, width: 196, height: 72, kind: 'vehicle_wreck', sprite: 'veh_car', hp: 70, destroyed: false },
             { x: 8510, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
             // Barriles tácticos en la arena del Jefe Final
             { x: 9740, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
             { x: 10220, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false }
         ];
 
-        // Trampas de púas en el pavimento (7 zonas de riesgo)
+        // Trampas de púas en el pavimento
         this.hazards = [
-            { x: 1275, y: GROUND_Y - 26, width: 112, height: 26, damage: 16 },
-            { x: 2310, y: GROUND_Y - 26, width: 112, height: 26, damage: 16 },
-            { x: 3360, y: GROUND_Y - 26, width: 112, height: 26, damage: 16 },
-            { x: 4560, y: GROUND_Y - 26, width: 112, height: 26, damage: 16 },
-            { x: 5915, y: GROUND_Y - 26, width: 112, height: 26, damage: 16 },
-            { x: 7480, y: GROUND_Y - 26, width: 112, height: 26, damage: 16 },
-            { x: 8740, y: GROUND_Y - 26, width: 112, height: 26, damage: 16 }
+            { x: 1235, y: GROUND_Y - 26, width: 92, height: 26, damage: 16 },
+            { x: 2375, y: GROUND_Y - 26, width: 92, height: 26, damage: 16 },
+            { x: 3365, y: GROUND_Y - 26, width: 92, height: 26, damage: 16 },
+            { x: 4545, y: GROUND_Y - 26, width: 92, height: 26, damage: 16 },
+            { x: 5755, y: GROUND_Y - 26, width: 92, height: 26, damage: 16 },
+            { x: 7480, y: GROUND_Y - 26, width: 92, height: 26, damage: 16 },
+            { x: 8740, y: GROUND_Y - 26, width: 92, height: 26, damage: 16 }
         ];
 
-        // Elementos ambientales del SpriteAtlas distribuidos a lo largo de 10,400 px
+        // Decoración urbana 100% en sprites HD (hidrantes, contenedores, bancas, neumáticos, vallas bio, bolsas)
         this.scenicProps = [
-            { x: 138, y: GROUND_Y - 96, w: 84, h: 96, sprite: 'prop_fence' },
-            { x: 352, y: GROUND_Y - 32, w: 58, h: 32, sprite: 'prop_rubble' },
-            { x: 1052, y: GROUND_Y - 96, w: 84, h: 96, sprite: 'prop_fence' },
-            { x: 1398, y: GROUND_Y - 66, w: 40, h: 66, sprite: 'prop_electric_box', sparks: true },
-            { x: 1995, y: GROUND_Y - 32, w: 58, h: 32, sprite: 'prop_rubble' },
-            { x: 2740, y: GROUND_Y - 96, w: 84, h: 96, sprite: 'prop_fence' },
-            { x: 3630, y: GROUND_Y - 66, w: 40, h: 66, sprite: 'prop_electric_box', sparks: true },
-            { x: 4380, y: GROUND_Y - 32, w: 58, h: 32, sprite: 'prop_rubble' },
-            { x: 5220, y: GROUND_Y - 96, w: 84, h: 96, sprite: 'prop_fence' },
+            { x: 92, y: GROUND_Y - 88, w: 148, h: 88, sprite: 'prop_fence_wide' },
+            { x: 382, y: GROUND_Y - 54, w: 32, h: 54, sprite: 'prop_hydrant' },
+            { x: 1035, y: GROUND_Y - 76, w: 108, h: 76, sprite: 'prop_dumpster' },
+            { x: 1412, y: GROUND_Y - 66, w: 40, h: 66, sprite: 'prop_electric_box', sparks: true },
+            { x: 2015, y: GROUND_Y - 52, w: 58, h: 52, sprite: 'prop_trash_bags' },
+            { x: 2695, y: GROUND_Y - 88, w: 124, h: 88, sprite: 'prop_fence_bio' },
+            { x: 3300, y: GROUND_Y - 52, w: 92, h: 52, sprite: 'prop_bench' },
+            { x: 3835, y: GROUND_Y - 66, w: 40, h: 66, sprite: 'prop_electric_box', sparks: true },
+            { x: 4380, y: GROUND_Y - 56, w: 58, h: 56, sprite: 'prop_tires' },
+            { x: 5210, y: GROUND_Y - 68, w: 98, h: 68, sprite: 'prop_wood_barricade' },
+            { x: 5625, y: GROUND_Y - 88, w: 124, h: 88, sprite: 'prop_fence_bio' },
             { x: 6320, y: GROUND_Y - 66, w: 40, h: 66, sprite: 'prop_electric_box', sparks: true },
-            { x: 6940, y: GROUND_Y - 96, w: 84, h: 96, sprite: 'prop_fence' },
-            { x: 7980, y: GROUND_Y - 32, w: 58, h: 32, sprite: 'prop_rubble' },
+            { x: 6995, y: GROUND_Y - 66, w: 38, h: 66, sprite: 'prop_barrel_blue' },
+            { x: 7980, y: GROUND_Y - 52, w: 58, h: 52, sprite: 'prop_trash_bags' },
             { x: 8420, y: GROUND_Y - 66, w: 40, h: 66, sprite: 'prop_electric_box', sparks: true },
-            { x: 9190, y: GROUND_Y - 96, w: 84, h: 96, sprite: 'prop_fence' },
-            { x: 10300, y: GROUND_Y - 96, w: 84, h: 96, sprite: 'prop_fence' }
+            { x: 9175, y: GROUND_Y - 88, w: 124, h: 88, sprite: 'prop_fence_bio' },
+            { x: 10285, y: GROUND_Y - 88, w: 148, h: 88, sprite: 'prop_fence_wide' }
         ];
 
-        // Farolas urbanas con iluminación volumétrica (20 farolas)
+        // Farolas urbanas con iluminación volumétrica
         this.streetLamps = [
             185, 665, 1215, 1785, 2355, 2910, 3490, 4020, 4620, 5180,
             5760, 6340, 6880, 7420, 7990, 8560, 9140, 9620, 10040
         ];
 
-        // Pilares desenfocados de primerísimo plano (parallax 1.26x)
-        this.foregroundPillars = [
-            420, 1220, 2040, 2880, 3740, 4580, 5440, 6280, 7120, 7960, 8820, 9680, 10480, 11320, 12180
-        ];
-
-        // Suministros tácticos en tejados y rutas elevadas (12 puntos)
+        // Pickups 100% en sprites HD (pickup_medkit, pickup_ammo, pickup_money, pickup_points)
         this.pickups = [
-            { x: 865, y: GROUND_Y - 186, width: 32, height: 32, type: 'ammo', taken: false },
-            { x: 1615, y: GROUND_Y - 192, width: 32, height: 32, type: 'medkit', taken: false },
-            { x: 2545, y: GROUND_Y - 198, width: 32, height: 32, type: 'ammo', taken: false },
-            { x: 3295, y: GROUND_Y - 190, width: 32, height: 32, type: 'medkit', taken: false },
-            { x: 4330, y: GROUND_Y - 314, width: 32, height: 32, type: 'ammo', taken: false },
-            { x: 4380, y: GROUND_Y - 314, width: 32, height: 32, type: 'medkit', taken: false },
-            { x: 5180, y: GROUND_Y - 196, width: 32, height: 32, type: 'ammo', taken: false },
-            { x: 6260, y: GROUND_Y - 194, width: 32, height: 32, type: 'medkit', taken: false },
-            { x: 7420, y: GROUND_Y - 312, width: 32, height: 32, type: 'ammo', taken: false },
-            { x: 8290, y: GROUND_Y - 194, width: 32, height: 32, type: 'medkit', taken: false },
-            { x: 9580, y: GROUND_Y - 182, width: 32, height: 32, type: 'ammo', taken: false },
-            { x: 9995, y: GROUND_Y - 182, width: 32, height: 32, type: 'medkit', taken: false }
+            { x: 865, y: GROUND_Y - 186, width: 36, height: 32, type: 'ammo', taken: false },
+            { x: 1615, y: GROUND_Y - 190, width: 36, height: 32, type: 'medkit', taken: false },
+            { x: 2230, y: GROUND_Y - 134, width: 36, height: 30, type: 'money', taken: false },
+            { x: 2545, y: GROUND_Y - 194, width: 36, height: 32, type: 'ammo', taken: false },
+            { x: 3295, y: GROUND_Y - 188, width: 36, height: 32, type: 'medkit', taken: false },
+            { x: 4325, y: GROUND_Y - 312, width: 36, height: 32, type: 'ammo', taken: false },
+            { x: 4380, y: GROUND_Y - 312, width: 34, height: 32, type: 'points', taken: false },
+            { x: 4755, y: GROUND_Y - 132, width: 36, height: 32, type: 'medkit', taken: false },
+            { x: 5180, y: GROUND_Y - 192, width: 36, height: 32, type: 'ammo', taken: false },
+            { x: 6260, y: GROUND_Y - 190, width: 36, height: 32, type: 'medkit', taken: false },
+            { x: 6670, y: GROUND_Y - 144, width: 36, height: 30, type: 'money', taken: false },
+            { x: 7420, y: GROUND_Y - 312, width: 36, height: 32, type: 'ammo', taken: false },
+            { x: 7855, y: GROUND_Y - 134, width: 34, height: 32, type: 'points', taken: false },
+            { x: 8290, y: GROUND_Y - 190, width: 36, height: 32, type: 'medkit', taken: false },
+            { x: 9580, y: GROUND_Y - 182, width: 36, height: 32, type: 'ammo', taken: false },
+            { x: 9995, y: GROUND_Y - 182, width: 36, height: 32, type: 'medkit', taken: false }
         ];
     }
 
@@ -407,40 +443,39 @@ export class Level01 {
             spriteAtlas: atlas
         });
 
-        // 27 infectados de tamaño humano simétrico con dificultad creciente por sector
+        // Las 8 especies de zombis con tabla exacta de puntos:
+        // walker(10), runner(25), resistant(35), spitter(40), bomber(45), armored(60), leaper(60), brute(65)
         this.enemies = [
-            // Sector 1: Primer contacto (zombis normales y primer corredor)
-            new Zombie('normal', { x: 535, y: GROUND_Y - 104, patrolMinX: 460, patrolMaxX: 575, spriteAtlas: atlas }),
-            new Zombie('normal', { x: 845, y: GROUND_Y - 104, patrolMinX: 720, patrolMaxX: 1100, spriteAtlas: atlas }),
-            new Zombie('normal', { x: 1035, y: GROUND_Y - 104, patrolMinX: 880, patrolMaxX: 1125, spriteAtlas: atlas }),
-            new Zombie('normal', { x: 1470, y: GROUND_Y - 104, patrolMinX: 1410, patrolMaxX: 1830, spriteAtlas: atlas }),
-            new Zombie('fast', { x: 1770, y: GROUND_Y - 100, patrolMinX: 1540, patrolMaxX: 1870, spriteAtlas: atlas }),
-            new Zombie('normal', { x: 2045, y: GROUND_Y - 104, patrolMinX: 1995, patrolMaxX: 2135, spriteAtlas: atlas }),
-            new Zombie('special', { x: 2540, y: GROUND_Y - 110, patrolMinX: 2450, patrolMaxX: 2790, spriteAtlas: atlas }),
+            // Sector 1: Avenida Sur (Caminantes, Corredores y Resistentes)
+            new Zombie('walker', { x: 550, y: GROUND_Y - 104, patrolMinX: 500, patrolMaxX: 575, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 855, y: GROUND_Y - 104, patrolMinX: 730, patrolMaxX: 1110, spriteAtlas: atlas }),
+            new Zombie('resistant', { x: 1055, y: GROUND_Y - 108, patrolMinX: 890, patrolMaxX: 1135, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 1500, y: GROUND_Y - 104, patrolMinX: 1420, patrolMaxX: 1830, spriteAtlas: atlas }),
+            new Zombie('runner', { x: 1790, y: GROUND_Y - 102, patrolMinX: 1550, patrolMaxX: 1875, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 2060, y: GROUND_Y - 104, patrolMinX: 2005, patrolMaxX: 2340, spriteAtlas: atlas }),
+            new Zombie('bomber', { x: 2555, y: GROUND_Y - 108, patrolMinX: 2450, patrolMaxX: 2790, spriteAtlas: atlas }),
 
-            // Sector 2: Distrito Comercial en Llamas (oleadas mixtas y azoteas)
-            new Zombie('normal', { x: 2810, y: GROUND_Y - 104, patrolMinX: 2710, patrolMaxX: 2925, spriteAtlas: atlas }),
-            new Zombie('fast', { x: 3140, y: GROUND_Y - 100, patrolMinX: 3030, patrolMaxX: 3340, spriteAtlas: atlas }),
-            new Zombie('normal', { x: 3820, y: GROUND_Y - 104, patrolMinX: 3790, patrolMaxX: 4160, spriteAtlas: atlas }),
-            new Zombie('fast', { x: 4180, y: GROUND_Y - 100, patrolMinX: 3980, patrolMaxX: 4440, spriteAtlas: atlas }),
-            new Zombie('special', { x: 4410, y: GROUND_Y - 110, patrolMinX: 4220, patrolMaxX: 4535, spriteAtlas: atlas }),
-            new Zombie('normal', { x: 4950, y: GROUND_Y - 104, patrolMinX: 4895, patrolMaxX: 5280, spriteAtlas: atlas }),
-            new Zombie('fast', { x: 5190, y: GROUND_Y - 100, patrolMinX: 4960, patrolMaxX: 5420, spriteAtlas: atlas }),
+            // Sector 2: Distrito Comercial (Vomitadores, Saltadores, Corredores y Bomberos)
+            new Zombie('resistant', { x: 2860, y: GROUND_Y - 108, patrolMinX: 2730, patrolMaxX: 2930, spriteAtlas: atlas }),
+            new Zombie('runner', { x: 3210, y: GROUND_Y - 102, patrolMinX: 3100, patrolMaxX: 3440, spriteAtlas: atlas }),
+            new Zombie('leaper', { x: 3820, y: GROUND_Y - 98, patrolMinX: 3680, patrolMaxX: 4160, spriteAtlas: atlas }),
+            new Zombie('runner', { x: 4190, y: GROUND_Y - 102, patrolMinX: 4000, patrolMaxX: 4430, spriteAtlas: atlas }),
+            new Zombie('bomber', { x: 4410, y: GROUND_Y - 108, patrolMinX: 4220, patrolMaxX: 4520, spriteAtlas: atlas }),
+            new Zombie('resistant', { x: 4960, y: GROUND_Y - 108, patrolMinX: 4895, patrolMaxX: 5280, spriteAtlas: atlas }),
             new Zombie('spitter', { x: 5380, y: GROUND_Y - 104, patrolMinX: 5210, patrolMaxX: 5450, spriteAtlas: atlas }),
 
-            // Sector 3: Cordón Militar de Cuarentena (alta densidad, escupidores y explosivos)
-            new Zombie('normal', { x: 5720, y: GROUND_Y - 104, patrolMinX: 5620, patrolMaxX: 5830, spriteAtlas: atlas }),
-            new Zombie('fast', { x: 6180, y: GROUND_Y - 100, patrolMinX: 6050, patrolMaxX: 6490, spriteAtlas: atlas }),
-            new Zombie('special', { x: 6390, y: GROUND_Y - 110, patrolMinX: 6150, patrolMaxX: 6580, spriteAtlas: atlas }),
-            new Zombie('normal', { x: 6730, y: GROUND_Y - 104, patrolMinX: 6685, patrolMaxX: 6820, spriteAtlas: atlas }),
-            new Zombie('fast', { x: 7160, y: GROUND_Y - 100, patrolMinX: 7020, patrolMaxX: 7440, spriteAtlas: atlas }),
-            new Zombie('spitter', { x: 7350, y: GROUND_Y - 104, patrolMinX: 7180, patrolMaxX: 7460, spriteAtlas: atlas }),
-            new Zombie('special', { x: 7685, y: GROUND_Y - 110, patrolMinX: 7610, patrolMaxX: 7755, spriteAtlas: atlas }),
-            new Zombie('fast', { x: 8140, y: GROUND_Y - 100, patrolMinX: 8010, patrolMaxX: 8460, spriteAtlas: atlas }),
-            new Zombie('normal', { x: 8340, y: GROUND_Y - 104, patrolMinX: 8120, patrolMaxX: 8580, spriteAtlas: atlas }),
-            new Zombie('special', { x: 8555, y: GROUND_Y - 110, patrolMinX: 8420, patrolMaxX: 8625, spriteAtlas: atlas }),
-            new Zombie('fast', { x: 8995, y: GROUND_Y - 100, patrolMinX: 8960, patrolMaxX: 9220, spriteAtlas: atlas }),
-            new Zombie('normal', { x: 9120, y: GROUND_Y - 104, patrolMinX: 8990, patrolMaxX: 9250, spriteAtlas: atlas })
+            // Sector 3: Cordón Militar de Cuarentena (Blindados antidisturbios, Saltadores y Bruto Mutante)
+            new Zombie('armored', { x: 5710, y: GROUND_Y - 112, patrolMinX: 5620, patrolMaxX: 5825, spriteAtlas: atlas }),
+            new Zombie('runner', { x: 6180, y: GROUND_Y - 102, patrolMinX: 6060, patrolMaxX: 6490, spriteAtlas: atlas }),
+            new Zombie('bomber', { x: 6460, y: GROUND_Y - 108, patrolMinX: 6220, patrolMaxX: 6680, spriteAtlas: atlas }),
+            new Zombie('leaper', { x: 6760, y: GROUND_Y - 98, patrolMinX: 6610, patrolMaxX: 6840, spriteAtlas: atlas }),
+            new Zombie('armored', { x: 7180, y: GROUND_Y - 112, patrolMinX: 7040, patrolMaxX: 7440, spriteAtlas: atlas }),
+            new Zombie('spitter', { x: 7360, y: GROUND_Y - 104, patrolMinX: 7180, patrolMaxX: 7460, spriteAtlas: atlas }),
+            new Zombie('bomber', { x: 7710, y: GROUND_Y - 108, patrolMinX: 7630, patrolMaxX: 7960, spriteAtlas: atlas }),
+            new Zombie('leaper', { x: 8260, y: GROUND_Y - 98, patrolMinX: 8140, patrolMaxX: 8480, spriteAtlas: atlas }),
+            new Zombie('brute', { x: 8590, y: GROUND_Y - 126, patrolMinX: 8420, patrolMaxX: 8630, spriteAtlas: atlas }),
+            new Zombie('runner', { x: 8995, y: GROUND_Y - 102, patrolMinX: 8960, patrolMaxX: 9210, spriteAtlas: atlas }),
+            new Zombie('resistant', { x: 9130, y: GROUND_Y - 108, patrolMinX: 9010, patrolMaxX: 9230, spriteAtlas: atlas })
         ];
     }
 
@@ -466,10 +501,11 @@ export class Level01 {
     _renderInventorySlots() {
         if (!this.inventorySlotsContainer) return;
         this.inventorySlotsContainer.innerHTML = '';
-        const owned = this.engine.inventory.getPurchasedWeapons();
+        // Solo muestra las 3 armas asignadas a la mochila ANTES de iniciar la partida
+        const loadout = this.engine.inventory.getLoadout();
         const equippedId = this.engine.inventory.getEquippedWeapon().id;
 
-        owned.forEach((weapon, idx) => {
+        loadout.forEach((weapon, idx) => {
             const card = document.createElement('button');
             card.type = 'button';
             card.className = `inv-slot-btn ${weapon.id === equippedId ? 'active' : ''}`;
@@ -535,36 +571,73 @@ export class Level01 {
 
         const combatCallbacks = {
             onSpawnProjectile: (cfg) => this.combat.spawnProjectile(cfg),
+            onPlayerMuzzleShot: (mx, my, facing, wId) => this.combat.spawnMuzzleAndCasing(mx, my, facing, wId),
             onPlayerMelee: (box, dmg, kb) => this.combat.handlePlayerMelee(box, dmg, kb, this.enemies, this.destructibles, this.player),
             onEnemyMeleeHit: (enemy, plr, dmg) => this.combat.handleEnemyMeleeHit(enemy, plr, dmg),
             onToxicExplosion: (zombie, plr) => this.combat.handleToxicExplosion(zombie, plr, this.enemies),
             onBossSlam: (boss) => this.combat.handleBossSlam(boss),
             onFloatingText: (x, y, text, color) => this.combat.spawnFloatingText(x, y, text, color),
             onLandImpact: (x, y, strength) => {
-                this.combat.spawnHitParticles(x, y - 2, '#9db4cc', Math.max(3, Math.round(strength * 6)));
+                this.combat.spawnHitParticles(x, y - 2, '#9db4cc', Math.max(3, Math.round(strength * 5)));
+                if (Math.abs(y - GROUND_Y) <= 8 && strength > 0.45) {
+                    this.combat.spawnWaterSplash(x, GROUND_Y);
+                }
             }
         };
 
         const activeMinX = this.arenaLocked ? ARENA_LOCK_X : 0;
         this.camera.setBounds(activeMinX, WORLD_WIDTH);
 
-        // 1. Actualizar Jugador (incluyendo escaleras verticales)
-        this.player.update(dt, this.engine.input, this.platforms, WORLD_WIDTH, combatCallbacks, this.ladders);
+        // 1. Actualizar Jugador (escaleras + cajas empujables + agacharse + rodar)
+        this.player.update(
+            dt,
+            this.engine.input,
+            this.platforms,
+            WORLD_WIDTH,
+            combatCallbacks,
+            this.ladders,
+            this.movableCrates
+        );
         if (this.arenaLocked && this.player.x < activeMinX + 16) {
             this.player.x = activeMinX + 16;
             this.player.vx = 0;
         }
 
+        // Gestión de las 3 vidas, reaparición en último Checkpoint o Game Over con transformación zombi y reseteo total
         if (this.player.dead) {
             this.defeatTimer += dt;
             this.camera.follow(this.player, dt);
-            if (this.defeatTimer >= 1.55) {
-                this.engine.sceneManager.transitionTo('gameOver', {
-                    retryScene: 'level01',
-                    levelName: 'PRIMERA ENTREGA',
-                    zombiesKilled: this.zombiesKilled,
-                    timeSeconds: this.elapsedTime
-                }, 0.5);
+            if (this.defeatTimer >= 1.35 && !this.gameOverTriggered) {
+                const remainingLives = this.engine.saveSystem.loseLife();
+                if (remainingLives > 0) {
+                    this.defeatTimer = 0;
+                    const respawnX = this.arenaLocked ? (ARENA_LOCK_X + 54) : this.lastCheckpointX;
+                    this.player.respawnAt(respawnX, GROUND_Y - this.player.height);
+                    if (this.engine.inventory.getReserveAmmo('pistol_9mm') < 12) {
+                        this.engine.inventory.addAmmo('pistol_9mm', 12);
+                    }
+                    this.engine.audio.playCheckpointRespawn?.();
+                    this.camera.shake(8, 0.24);
+                    this.combat.spawnFloatingText(
+                        this.player.x - 24,
+                        this.player.y - 24,
+                        `♥ REAPARICIÓN EN CHECKPOINT — VIDAS: ${remainingLives}`,
+                        '#47ff8c'
+                    );
+                } else {
+                    this.gameOverTriggered = true;
+                    const finalScore = this.engine.economy.getScore();
+                    this.engine.saveSystem.resetGameOnPermadeath();
+                    this.engine.inventory.resetMissionLoadout();
+                    this.engine.sceneManager.transitionTo('gameOver', {
+                        retryScene: 'briefing',
+                        levelName: 'PRIMERA ENTREGA',
+                        zombiesKilled: this.zombiesKilled,
+                        timeSeconds: this.elapsedTime,
+                        finalScore,
+                        permadeath: true
+                    }, 0.5);
+                }
             }
             this._syncHud();
             return;
@@ -577,7 +650,7 @@ export class Level01 {
         // 3. Interacciones de Misión (Recoger paquete / Entregar paquete con E)
         this._checkMissionInteractions();
 
-        // 4. Recogida de suministros (botiquines y munición)
+        // 4. Recogida de suministros (botiquines, munición, dinero y monedas de puntos)
         this._checkSupplyPickups();
 
         // 5. Actualizar Enemigos y Jefe Final
@@ -586,8 +659,8 @@ export class Level01 {
         }
         this.enemies = this.enemies.filter(e => !e.removable);
 
-        // 6. Actualizar Sistema de Combate
-        this.combat.update(dt, this.player, this.enemies, this.platforms, this.destructibles);
+        // 6. Actualizar Sistema de Combate + VFX en sprites
+        this.combat.update(dt, this.player, this.enemies, this.platforms, this.destructibles, this.movableCrates);
 
         // 7. Actualizar Cámara y HUD
         this.camera.follow(this.player, dt);
@@ -595,12 +668,13 @@ export class Level01 {
     }
 
     _checkSpikeHazards() {
+        const hurtbox = this.player.getHurtbox ? this.player.getHurtbox() : this.player;
         for (const hz of this.hazards) {
             const hitbox = { x: hz.x + 8, y: hz.y + 8, width: hz.width - 16, height: hz.height - 8 };
-            if (CollisionSystem.intersectsAABB(this.player, hitbox)) {
+            if (CollisionSystem.intersectsAABB(hurtbox, hitbox)) {
                 if (this.player.takeDamage(hz.damage, hz.x + hz.width * 0.5)) {
                     this.camera.shake(7, 0.2);
-                    this.combat.spawnHitParticles(this.player.x + 20, this.player.y + 62, '#d91e2a', 8);
+                    this.combat.spawnSpriteVfx('vfx_hit_blood', this.player.x + 22, this.player.y + 62, { targetHeight: 48 });
                     this.combat.spawnFloatingText(this.player.x, this.player.y - 12, `-${hz.damage} PÚAS`, '#ff4d5a');
                 }
             }
@@ -612,14 +686,15 @@ export class Level01 {
             if (cp.reached) continue;
             if (CollisionSystem.intersectsAABB(this.player, cp)) {
                 cp.reached = true;
+                this.lastCheckpointX = cp.x + 12;
                 this.engine.audio.playPickup();
-                this.engine.economy.addScore(150);
-                this.player.health = Math.min(this.player.maxHealth, this.player.health + 30);
+                this.engine.economy.addMoney(30);
+                this.player.health = Math.min(this.player.maxHealth, this.player.health + 35);
                 this.engine.inventory.addAmmo('pistol_9mm', 14);
                 this.combat.spawnFloatingText(
                     cp.x - 24,
                     cp.y - 18,
-                    `✓ ${cp.label}: +30 SALUD / +14 BALAS`,
+                    `✓ CHECKPOINT ${cp.label}: GUARDADO (+35 SALUD / +$30)`,
                     '#47ff8c'
                 );
             }
@@ -630,28 +705,29 @@ export class Level01 {
         const interactPressed = this.engine.input.isActionJustPressed('interact');
 
         const pickupZone = {
-            x: this.pickupStation.x - 26,
+            x: this.pickupStation.x - 24,
             y: this.pickupStation.y - 20,
-            width: this.pickupStation.width + 52,
+            width: this.pickupStation.width + 48,
             height: this.pickupStation.height + 24
         };
 
         const deliveryZone = {
-            x: this.deliveryStation.x - 28,
+            x: this.deliveryStation.x - 24,
             y: this.deliveryStation.y - 20,
-            width: this.deliveryStation.width + 56,
+            width: this.deliveryStation.width + 48,
             height: this.deliveryStation.height + 24
         };
 
         if (!this.player.hasPackage && CollisionSystem.intersectsAABB(this.player, pickupZone)) {
             if (interactPressed) {
                 this.player.hasPackage = true;
+                this.lastCheckpointX = Math.max(this.lastCheckpointX, this.pickupStation.x + 24);
                 this.engine.audio.playPickup();
-                this.engine.economy.addScore(150);
+                this.engine.economy.addMoney(25);
                 this.combat.spawnFloatingText(
                     this.player.x,
                     this.player.y - 18,
-                    '📦 PAQUETE RECIBIDO (+150 PTS)',
+                    '📦 PAQUETE RECIBIDO (+$25 BONO)',
                     '#ffd166'
                 );
             }
@@ -671,12 +747,13 @@ export class Level01 {
                 }
 
                 this.player.packageDelivered = true;
+                this.lastCheckpointX = ARENA_LOCK_X + 54;
                 this.engine.audio.playPickup();
-                this.engine.economy.addScore(350);
+                this.engine.economy.addMoney(60);
                 this.combat.spawnFloatingText(
                     this.player.x - 20,
                     this.player.y - 24,
-                    '✓ ENTREGA REGISTRADA — ¡MUTANTE B-3 DETECTADO!',
+                    '✓ ENTREGA REGISTRADA (+$60) — ¡MUTANTE B-3 DETECTADO!',
                     '#47ff8c'
                 );
                 this._triggerBossEncounter();
@@ -712,11 +789,17 @@ export class Level01 {
                 if (item.type === 'medkit') {
                     this.engine.inventory.addMedkits(1);
                     this.combat.spawnFloatingText(item.x, item.y - 10, '+1 BOTIQUÍN [H]', '#47ff8c');
+                } else if (item.type === 'money') {
+                    this.engine.economy.addMoney(40);
+                    this.combat.spawnFloatingText(item.x, item.y - 10, '+$40 EFECTIVO', '#47ff8c');
+                } else if (item.type === 'points') {
+                    this.engine.economy.addScore(100);
+                    this.combat.spawnFloatingText(item.x, item.y - 10, '+100 PTS EXTRA', '#ffd166');
                 } else {
                     const equipped = this.engine.inventory.getEquippedWeapon();
                     const targetWeapon = equipped.type === 'ranged' ? equipped.id : 'pistol_9mm';
                     const spec = this.engine.inventory.getWeaponSpec(targetWeapon);
-                    const amount = spec.magazineSize * 2;
+                    const amount = Math.max(8, spec.magazineSize * 2);
                     this.engine.inventory.addAmmo(targetWeapon, amount);
                     this.combat.spawnFloatingText(item.x, item.y - 10, `+${amount} MUNICIÓN`, '#ffd166');
                 }
@@ -733,10 +816,17 @@ export class Level01 {
         this.moneyEarnedInRun = this.engine.economy.getMoney() - this.startMoneySnapshot;
 
         this.engine.economy.addMoney(levelInfo.baseMoneyReward);
-        this.engine.economy.addScore(levelInfo.baseScoreReward);
+        if (levelInfo.baseScoreReward > 0) {
+            this.engine.economy.addScore(levelInfo.baseScoreReward);
+        }
         this.scoreEarnedInRun = this.engine.economy.getScore() - this.startScoreSnapshot;
 
-        this.engine.saveSystem.completeLevel(1, ['shotgun_combat', 'smg_tactical']);
+        this.engine.saveSystem.completeLevel(1, [
+            'machete_combat',
+            'revolver_magnum',
+            'shotgun_combat',
+            'smg_tactical'
+        ]);
         this.engine.audio.playVictory();
 
         if (this.resScore) this.resScore.textContent = `${this.scoreEarnedInRun} PTS`;
@@ -780,6 +870,12 @@ export class Level01 {
         const playerName = this.engine.saveSystem.getPlayerName() || 'Repartidor';
         if (this.hudPlayerName) this.hudPlayerName.textContent = playerName;
 
+        const lives = this.engine.saveSystem.getLives();
+        if (this.hudLives) {
+            const hearts = '♥'.repeat(Math.min(5, Math.max(0, lives)));
+            this.hudLives.textContent = `${hearts || '☠'} x${lives}`;
+        }
+
         if (this.player) {
             const hpRatio = Math.max(0, this.player.health / this.player.maxHealth);
             if (this.hudHealthFill) this.hudHealthFill.style.width = `${Math.round(hpRatio * 100)}%`;
@@ -813,7 +909,11 @@ export class Level01 {
         }
 
         if (this.hudMoney) this.hudMoney.textContent = `$${this.engine.economy.getMoney()}`;
-        if (this.hudScore) this.hudScore.textContent = `${this.engine.economy.getScore()}`;
+        if (this.hudScore) {
+            const sc = this.engine.economy.getScore();
+            const nextLife = this.engine.saveSystem.state.player.nextLifeScore || 3000;
+            this.hudScore.textContent = `${sc} (Vida: ${nextLife})`;
+        }
 
         const weapon = this.engine.inventory.getEquippedWeapon();
         if (this.hudWeaponName) this.hudWeaponName.textContent = weapon.shortName;
@@ -839,7 +939,7 @@ export class Level01 {
     }
 
     // =========================================================================
-    // RENDERIZADO HD 2.5D EN 5 PLANOS DE PROFUNDIDAD
+    // RENDERIZADO HD 2.5D CON SPRITES REALES (CERO OBJETOS PROCEDURALES PLANOS)
     // =========================================================================
 
     render(renderer) {
@@ -847,29 +947,33 @@ export class Level01 {
         const camX = this.camera.getRenderX();
         const camY = this.camera.getRenderY();
 
-        // PLANO 1 (0.05x - 0.16x): Cielo tormentoso, luna llena y horizonte lejano
+        // PLANO 1: Cielo tormentoso, luna llena y horizonte lejano
         this._renderFarSkylineParallax(ctx, renderer, camX);
 
-        // PLANO 2 (0.42x): Distrito urbano medio envuelto en bruma azul nocturna
+        // PLANO 2: Distrito urbano medio envuelto en bruma azul nocturna
         this._renderMidCityParallax(ctx, renderer, camX);
 
-        // PLANO 3 (1.0x): Fondo ilustrado HD city_street_hd.png a pantalla completa sin cortes
+        // PLANO 3: Fondo ilustrado HD city_street_hd.png a escala humana simétrica
         this._renderMainStreetBackdrop(ctx, renderer, camX, camY);
 
-        // PLANO 4 (1.0x Jugable): Estaciones, puestos de control, escaleras, plataformas y suministros
+        // PLANO 4: Sprites de escenario, estaciones, checkpoints, vehículos, andamios, cajas móviles y pickups
         this._renderScenicPropsAndLadders(ctx, renderer, camX, camY);
         this._renderCheckpointsAndSigns(ctx, renderer, camX, camY);
         this._renderMissionStations(ctx, renderer, camX, camY);
         this._renderPlatformsAndDestructibles(ctx, renderer, camX, camY);
+        this._renderMovableCrates(ctx, renderer, camX, camY);
         this._renderSupplyPickups(ctx, renderer, camX, camY);
 
         if (this.arenaLocked) {
             this._renderArenaBarrier(ctx, camX, camY);
         }
 
+        // Charcos de sangre en el suelo (vfx_blood_pool)
+        this.combat?.renderGroundDecals(ctx, camX, camY);
+
         // Entidades vivas y combate
         for (const enemy of this.enemies) {
-            if (enemy.x + enemy.width < camX - 140 || enemy.x > camX + renderer.width + 140) continue;
+            if (enemy.x + enemy.width < camX - 150 || enemy.x > camX + renderer.width + 150) continue;
             enemy.render(ctx, camX, camY, renderer);
         }
 
@@ -880,8 +984,8 @@ export class Level01 {
         this._renderStreetLampLights(ctx, renderer, camX, camY);
         this.player?.renderFlashlight(renderer, camX, camY);
 
-        // Atmósfera final: niebla baja, lluvia y viñeta cinematográfica (sin barras verticales intrusivas)
-        renderer.drawFog('115, 145, 180', 0.50);
+        // Atmósfera final
+        renderer.drawFog('115, 145, 180', 0.48);
         this._renderGroundAtmosphereShade(ctx, renderer);
         renderer.drawRain(true);
         renderer.drawVignette(0.70);
@@ -955,10 +1059,8 @@ export class Level01 {
         octx.imageSmoothingEnabled = true;
         if ('imageSmoothingQuality' in octx) octx.imageSmoothingQuality = 'high';
 
-        // 1. Dibujar manzana urbana a escala humana simétrica (1480x493: puertas ~128px, autos ~91px, personajes 120px)
         octx.drawImage(cityImg, 0, roofPad, tileW, imgH);
 
-        // 2. Ocultar luna repetida del tile para que solo brille la luna única del cielo principal
         const moonMask = octx.createRadialGradient(756, roofPad + 52, 8, 756, roofPad + 52, 74);
         moonMask.addColorStop(0, 'rgba(9, 19, 34, 0.96)');
         moonMask.addColorStop(0.65, 'rgba(11, 22, 38, 0.78)');
@@ -966,7 +1068,6 @@ export class Level01 {
         octx.fillStyle = moonMask;
         octx.fillRect(670, roofPad, 175, 130);
 
-        // 3. Fundido suave del borde superior del cielo hacia el cielo nocturno dinámico (cero costuras horizontales)
         octx.save();
         octx.globalCompositeOperation = 'destination-out';
         const skyFade = octx.createLinearGradient(0, roofPad, 0, roofPad + 58);
@@ -977,8 +1078,6 @@ export class Level01 {
         octx.fillRect(334, roofPad, 988, 60);
         octx.restore();
 
-        // 4. Remate arquitectónico superior (cornisa y parapeto de azotea) para los edificios laterales
-        // Edificio izquierdo (Minimarket)
         octx.fillStyle = '#1b171c';
         octx.fillRect(0, 22, 336, roofPad - 18);
         octx.fillStyle = '#2b2226';
@@ -987,7 +1086,6 @@ export class Level01 {
         octx.fillRect(46, 2, 78, 16);
         octx.fillRect(205, 6, 52, 12);
 
-        // Edificio derecho
         octx.fillStyle = '#1a171d';
         octx.fillRect(1322, 24, tileW - 1322, roofPad - 20);
         octx.fillStyle = '#2a2228';
@@ -1003,7 +1101,6 @@ export class Level01 {
         const cityImg = this.engine.assets?.getImage('city_bg');
 
         if (cityImg && typeof ctx.drawImage === 'function' && (cityImg.complete === undefined || cityImg.complete) && (cityImg.naturalWidth === undefined || cityImg.naturalWidth > 0)) {
-            // Escala urbana simétrica: tileW=1480, imgH=493 (curbOffset=414 => puertas ~128px y sedán ~91px frente a jugador de 120px)
             const tileW = 1480;
             const imgH = 493;
             const roofPad = 62;
@@ -1036,7 +1133,6 @@ export class Level01 {
                     ctx.drawImage(drawSource, drawX, topY, tileW, drawH);
                 }
 
-                // Sombra suave de callejón en la unión entre manzanas urbanas
                 const seamGrad = ctx.createLinearGradient(drawX - 36, 0, drawX + 36, 0);
                 seamGrad.addColorStop(0, 'rgba(4, 7, 12, 0)');
                 seamGrad.addColorStop(0.5, 'rgba(4, 7, 12, 0.58)');
@@ -1059,7 +1155,6 @@ export class Level01 {
             ctx.fillRect(0, GROUND_Y - camY, renderer.width, 6);
         }
 
-        // Reflejos dinámicos de charcos sobre el asfalto mojado
         const sy = Math.round(GROUND_Y - camY);
         ctx.save();
         for (let i = 0; i < this.streetLamps.length; i++) {
@@ -1086,8 +1181,11 @@ export class Level01 {
             if (atlas?.isReady()) {
                 atlas.drawSprite(ctx, prop.sprite, sx, sy, prop.w, prop.h);
             }
-            if (prop.sparks && Math.sin(this.time * 19 + prop.x) > 0.94) {
-                renderer.drawRadialGlow(sx + prop.w * 0.5, sy + 24, 2, 34, 'rgba(110, 215, 255, 0.65)');
+            if (prop.sparks && Math.sin(this.time * 19 + prop.x) > 0.90) {
+                renderer.drawRadialGlow(sx + prop.w * 0.5, sy + 22, 2, 38, 'rgba(110, 215, 255, 0.72)');
+                if (atlas?.getExtImage()) {
+                    atlas.drawSprite(ctx, 'vfx_electric_arc', sx - 8, sy + 6, 54, 34);
+                }
             }
         }
 
@@ -1112,9 +1210,6 @@ export class Level01 {
                     const h = Math.min(segH, (ly + lad.height) - drawY);
                     atlas.drawSprite(ctx, 'prop_ladder', lx, drawY, lad.width, Math.max(24, h));
                 }
-            } else {
-                ctx.fillStyle = '#7a542e';
-                ctx.fillRect(lx, ly, lad.width, lad.height);
             }
         }
 
@@ -1125,123 +1220,117 @@ export class Level01 {
 
             if (atlas?.isReady()) {
                 atlas.drawSprite(ctx, 'prop_spikes', hx, hy, hz.width, hz.height);
-            } else {
-                ctx.fillStyle = '#9aa5b4';
-                ctx.fillRect(hx, hy, hz.width, hz.height);
             }
         }
     }
 
     _renderCheckpointsAndSigns(ctx, renderer, camX, camY) {
+        const atlas = this.engine.spriteAtlas;
+
+        // Señales urbanas con sprites reales (prop_sign_street, prop_traffic_light, prop_sign_stop)
         for (const sign of this.sectorSigns) {
             const sx = Math.round(sign.x - camX);
-            const sy = Math.round(GROUND_Y - 142 - camY);
-            if (sx < -160 || sx > renderer.width + 160) continue;
+            const sy = Math.round(GROUND_Y - sign.h - camY);
+            if (sx < -140 || sx > renderer.width + 140) continue;
 
+            if (atlas?.isReady()) {
+                atlas.drawSprite(ctx, sign.sprite, sx, sy, sign.w, sign.h);
+            }
             ctx.save();
-            ctx.fillStyle = '#1b2432';
-            ctx.fillRect(sx + 54, sy + 42, 6, 100);
-            ctx.fillStyle = 'rgba(12, 18, 28, 0.92)';
-            ctx.strokeStyle = '#3b4e68';
-            ctx.lineWidth = 2;
-            ctx.fillRect(sx, sy, 122, 44);
-            ctx.strokeRect(sx, sy, 122, 44);
-            ctx.fillStyle = '#f5a623';
             ctx.font = 'bold 10px Consolas, monospace';
-            ctx.fillText(sign.title, sx + 10, sy + 16);
-            ctx.fillStyle = '#dce6f2';
-            ctx.fillText(sign.sub, sx + 10, sy + 32);
+            ctx.fillStyle = '#05080d';
+            ctx.fillText(`${sign.title} · ${sign.sub}`, sx - 17, sy - 7);
+            ctx.fillStyle = '#ffd166';
+            ctx.fillText(`${sign.title} · ${sign.sub}`, sx - 18, sy - 8);
             ctx.restore();
         }
 
+        // Checkpoints renderizados con generador eléctrico + consola táctica + reflector de obra en sprites HD
         for (const cp of this.checkpoints) {
             const cx = Math.round(cp.x - camX);
-            const cy = Math.round(cp.y - camY);
-            if (cx < -120 || cx > renderer.width + 120) continue;
+            const gy = Math.round(GROUND_Y - camY);
+            if (cx < -160 || cx > renderer.width + 160) continue;
 
-            const col = cp.reached ? '#38e57d' : '#f5a623';
             renderer.drawRadialGlow(
-                cx + 39,
-                cy + 24,
-                4,
-                68,
-                cp.reached ? 'rgba(56, 229, 125, 0.34)' : 'rgba(245, 166, 35, 0.28)'
+                cx + 62,
+                gy - 58,
+                6,
+                88,
+                cp.reached ? 'rgba(56, 229, 125, 0.36)' : 'rgba(245, 166, 35, 0.30)'
             );
 
+            if (atlas?.isReady()) {
+                atlas.drawSprite(ctx, 'prop_work_light', cx - 6, gy - 98, 48, 98);
+                atlas.drawSprite(ctx, 'prop_generator', cx + 28, gy - 58, 72, 58);
+                atlas.drawSprite(ctx, 'prop_console', cx + 88, gy - 68, 66, 68);
+            }
+
             ctx.save();
-            ctx.fillStyle = 'rgba(12, 20, 28, 0.92)';
-            ctx.strokeStyle = col;
-            ctx.lineWidth = 2;
-            ctx.fillRect(cx, cy, cp.width, cp.height);
-            ctx.strokeRect(cx, cy, cp.width, cp.height);
-            ctx.fillStyle = col;
-            ctx.font = 'bold 10px Consolas, monospace';
-            ctx.fillText(cp.reached ? '✓ ACTIVO' : 'RADIO', cx + 12, cy + 22);
-            ctx.fillStyle = '#d6e4f5';
-            ctx.fillText(cp.label.split(' ')[1], cx + 14, cy + 40);
+            ctx.font = 'bold 11px Consolas, monospace';
+            const tag = cp.reached ? `✓ ${cp.label} [GUARDADO]` : `⚑ ${cp.label}`;
+            ctx.fillStyle = '#04070c';
+            ctx.fillText(tag, cx + 3, gy - 105);
+            ctx.fillStyle = cp.reached ? '#47ff8c' : '#ffd166';
+            ctx.fillText(tag, cx + 2, gy - 106);
             ctx.restore();
         }
     }
 
     _renderMissionStations(ctx, renderer, camX, camY) {
         const atlas = this.engine.spriteAtlas;
+        const gy = Math.round(GROUND_Y - camY);
 
+        // Puesto Sur de Recepción: parada urbana prop_bus_stop + palé cubierto prop_pallet_tarp + paquete pickup_package
         const px = Math.round(this.pickupStation.x - camX);
-        const py = Math.round(this.pickupStation.y - camY);
-        if (px + 150 > 0 && px < renderer.width) {
-            ctx.fillStyle = 'rgba(16, 24, 36, 0.92)';
-            ctx.strokeStyle = '#f5a623';
-            ctx.lineWidth = 2.5;
-            ctx.fillRect(px, py, this.pickupStation.width, this.pickupStation.height);
-            ctx.strokeRect(px, py, this.pickupStation.width, this.pickupStation.height);
+        if (px + 220 > 0 && px < renderer.width) {
+            renderer.drawRadialGlow(px + 84, gy - 64, 8, 96, 'rgba(245, 166, 35, 0.34)');
+            if (atlas?.isReady()) {
+                atlas.drawSprite(ctx, 'prop_bus_stop', px - 12, gy - 122, 198, 122);
+                atlas.drawSprite(ctx, 'prop_pallet_tarp', px + 12, gy - 62, 78, 62);
+            }
 
-            ctx.fillStyle = '#f5a623';
+            ctx.save();
             ctx.font = 'bold 11px Consolas, monospace';
-            ctx.fillText('DESPACHO SUR', px + 14, py + 20);
-
             if (!this.player?.hasPackage) {
                 const bob = Math.sin(this.time * 4.5) * 4;
-                renderer.drawRadialGlow(px + 55, py + 62, 8, 64, 'rgba(245, 166, 35, 0.42)');
                 if (atlas?.isReady()) {
-                    atlas.drawSprite(ctx, 'icon_package', px + 31, py + 42 + bob, 48, 41);
-                } else {
-                    ctx.fillStyle = '#ba8750';
-                    ctx.fillRect(px + 38, py + 52 + bob, 34, 28);
+                    atlas.drawSprite(ctx, 'pickup_package', px + 108, gy - 48 + bob, 46, 38);
                 }
+                ctx.fillStyle = '#04070c';
+                ctx.fillText('[E] RECIBIR PAQUETE — DESPACHO SUR', px - 9, gy - 131 + bob);
                 ctx.fillStyle = '#ffe082';
-                ctx.fillText('[E] RECIBIR PAQUETE', px - 8, py - 12 + bob);
+                ctx.fillText('[E] RECIBIR PAQUETE — DESPACHO SUR', px - 10, gy - 132 + bob);
             } else {
                 ctx.fillStyle = '#9fb2c8';
-                ctx.fillText('✓ EN RUTA', px + 24, py + 64);
+                ctx.fillText('✓ PAQUETE EN RUTA', px + 26, gy - 130);
             }
+            ctx.restore();
         }
 
+        // Refugio Norte de Entrega: parada blindada prop_bus_stop + consola prop_console + cartel biohazard + reflector
         const dx = Math.round(this.deliveryStation.x - camX);
-        const dy = Math.round(this.deliveryStation.y - camY);
-        if (dx + 170 > 0 && dx < renderer.width) {
-            ctx.fillStyle = 'rgba(13, 30, 22, 0.92)';
-            ctx.strokeStyle = '#38e57d';
-            ctx.lineWidth = 2.5;
-            ctx.fillRect(dx, dy, this.deliveryStation.width, this.deliveryStation.height);
-            ctx.strokeRect(dx, dy, this.deliveryStation.width, this.deliveryStation.height);
-
-            renderer.drawRadialGlow(dx + 65, dy + 42, 10, 95, 'rgba(56, 229, 125, 0.32)');
-            ctx.fillStyle = '#38e57d';
-            ctx.font = 'bold 12px Consolas, monospace';
-            ctx.fillText('REFUGIO NORTE', dx + 18, dy + 24);
-
+        if (dx + 230 > 0 && dx < renderer.width) {
+            renderer.drawRadialGlow(dx + 88, gy - 68, 10, 112, 'rgba(56, 229, 125, 0.36)');
             if (atlas?.isReady()) {
-                atlas.drawSprite(ctx, 'icon_backpack', dx + 43, dy + 44, 44, 46, { alpha: 0.9 });
+                atlas.drawSprite(ctx, 'prop_bus_stop', dx - 10, gy - 124, 202, 124);
+                atlas.drawSprite(ctx, 'prop_console', dx + 22, gy - 72, 74, 72);
+                atlas.drawSprite(ctx, 'prop_sign_biohazard', dx + 132, gy - 98, 42, 44);
+                atlas.drawSprite(ctx, 'prop_work_light', dx + 168, gy - 98, 48, 98);
             }
 
+            ctx.save();
+            ctx.font = 'bold 11px Consolas, monospace';
             if (!this.player?.packageDelivered) {
                 const bob = Math.sin(this.time * 4.5) * 4;
+                ctx.fillStyle = '#04070c';
+                ctx.fillText('[E] ENTREGAR PAQUETE — REFUGIO NORTE', dx - 11, gy - 133 + bob);
                 ctx.fillStyle = '#5cff9d';
-                ctx.fillText('[E] ENTREGAR PAQUETE', dx - 8, dy - 12 + bob);
+                ctx.fillText('[E] ENTREGAR PAQUETE — REFUGIO NORTE', dx - 12, gy - 134 + bob);
             } else {
                 ctx.fillStyle = '#5cff9d';
-                ctx.fillText('✓ PAQUETE ENTREGADO', dx - 4, dy - 12);
+                ctx.fillText('✓ PAQUETE ENTREGADO EN REFUGIO', dx + 4, gy - 132);
             }
+            ctx.restore();
         }
     }
 
@@ -1252,57 +1341,39 @@ export class Level01 {
             if (plat.kind === 'ground') continue;
             const sx = Math.round(plat.x - camX);
             const sy = Math.round(plat.y - camY);
-            if (sx + plat.width < -30 || sx > renderer.width + 30) continue;
+            if (sx + plat.width < -50 || sx > renderer.width + 50) continue;
 
-            if (plat.kind === 'barrier_concrete' && atlas?.isReady()) {
-                atlas.drawSprite(ctx, 'prop_barrier_concrete', sx, sy - 6, plat.width, plat.height + 6);
-            } else if (plat.kind === 'metal_crate' && atlas?.isReady()) {
-                atlas.drawSprite(ctx, 'prop_crate_metal', sx, sy, plat.width, plat.height);
-            } else if (plat.kind === 'rooftop_walkway') {
-                ctx.fillStyle = 'rgba(8, 12, 18, 0.65)';
-                ctx.fillRect(sx + 10, sy + plat.height, 10, GROUND_Y - plat.y - plat.height);
-                ctx.fillRect(sx + plat.width - 20, sy + plat.height, 10, GROUND_Y - plat.y - plat.height);
+            if (!atlas?.isReady()) continue;
 
-                ctx.strokeStyle = '#38465a';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(sx + 4, sy - 24, plat.width - 8, 24);
-
-                ctx.fillStyle = '#263244';
-                ctx.strokeStyle = '#7386a0';
-                ctx.fillRect(sx, sy, plat.width, plat.height);
-                ctx.strokeRect(sx, sy, plat.width, plat.height);
-
-                ctx.fillStyle = '#e09b24';
-                for (let stripeX = sx + 6; stripeX < sx + plat.width - 14; stripeX += 24) {
-                    ctx.fillRect(stripeX, sy + 4, 12, 4);
+            if (plat.kind === 'barrier_concrete') {
+                atlas.drawSprite(ctx, 'prop_barrier_yellow', sx, sy - 6, plat.width, plat.height + 6);
+            } else if (plat.kind === 'barrier_red') {
+                atlas.drawSprite(ctx, 'prop_barrier_red', sx, sy - 8, plat.width, plat.height + 8);
+            } else if (plat.kind === 'metal_crate') {
+                atlas.drawSprite(ctx, 'prop_crate_metal_hd', sx, sy, plat.width, plat.height);
+            } else if (plat.kind === 'scaffold') {
+                // Andamios metálicos reales en sprite (prop_scaffold) en lugar de barras procedurales
+                const drawH = plat.drawH || (GROUND_Y - plat.y);
+                const segW = Math.min(plat.width, 156);
+                const cols = Math.max(1, Math.ceil(plat.width / segW));
+                const tileW = Math.ceil(plat.width / cols);
+                for (let c = 0; c < cols; c++) {
+                    atlas.drawSprite(ctx, 'prop_scaffold', sx + c * tileW, sy - 4, tileW + 2, drawH + 4);
                 }
-            } else if (plat.kind === 'ambulance') {
-                ctx.fillStyle = '#cfd9e3';
-                ctx.strokeStyle = '#0a0e15';
-                ctx.lineWidth = 2.5;
-                ctx.fillRect(sx, sy, plat.width, plat.height);
-                ctx.strokeRect(sx, sy, plat.width, plat.height);
+            } else if (plat.kind.startsWith('veh_')) {
+                // Vehículos pixel-art HD reales: veh_ambulance, veh_police, veh_taxi, veh_truck
+                const drawH = plat.drawH || 98;
+                const vy = Math.round(GROUND_Y - drawH - camY);
+                atlas.drawSprite(ctx, plat.kind, sx, vy, plat.width, drawH);
 
-                ctx.fillStyle = '#c81e2b';
-                ctx.fillRect(sx + 10, sy + 30, plat.width - 20, 12);
-                ctx.fillRect(sx + 44, sy + 14, 10, 28);
-                ctx.fillRect(sx + 35, sy + 23, 28, 10);
-
-                ctx.fillStyle = '#111926';
-                ctx.fillRect(sx + plat.width - 44, sy + 10, 34, 24);
-
-                ctx.fillStyle = '#080b10';
-                ctx.beginPath();
-                ctx.arc(sx + 34, sy + plat.height - 2, 15, 0, Math.PI * 2);
-                ctx.arc(sx + plat.width - 36, sy + plat.height - 2, 15, 0, Math.PI * 2);
-                ctx.fill();
-
-                if (Math.sin(this.time * 9) > 0) {
-                    renderer.drawRadialGlow(sx + plat.width - 32, sy - 4, 2, 42, 'rgba(255, 38, 52, 0.55)');
+                if (plat.kind === 'veh_ambulance' || plat.kind === 'veh_police') {
+                    const pulse = Math.sin(this.time * 10 + plat.x);
+                    if (pulse > 0) {
+                        renderer.drawRadialGlow(sx + plat.width * 0.56, vy + 8, 3, 56, 'rgba(255, 38, 54, 0.58)');
+                    } else if (plat.kind === 'veh_police') {
+                        renderer.drawRadialGlow(sx + plat.width * 0.48, vy + 8, 3, 56, 'rgba(56, 148, 255, 0.58)');
+                    }
                 }
-            } else {
-                ctx.fillStyle = '#3a4658';
-                ctx.fillRect(sx, sy, plat.width, plat.height);
             }
         }
 
@@ -1310,22 +1381,42 @@ export class Level01 {
             if (prop.destroyed) continue;
             const sx = Math.round(prop.x - camX);
             const sy = Math.round(prop.y - camY);
-            if (sx + prop.width < -30 || sx > renderer.width + 30) continue;
+            if (sx + prop.width < -40 || sx > renderer.width + 40) continue;
+
+            if (!atlas?.isReady()) continue;
 
             if (prop.kind === 'barrel_red') {
                 renderer.drawRadialGlow(sx + prop.width * 0.5, sy + prop.height * 0.5, 4, 42, 'rgba(255, 72, 36, 0.24)');
-                if (atlas?.isReady()) {
-                    atlas.drawSprite(ctx, 'prop_barrel_red', sx, sy, prop.width, prop.height);
-                } else {
-                    ctx.fillStyle = '#c8232c';
-                    ctx.fillRect(sx, sy, prop.width, prop.height);
-                }
+                atlas.drawSprite(ctx, 'prop_barrel_red', sx, sy, prop.width, prop.height);
+            } else if (prop.kind === 'vehicle_wreck') {
+                atlas.drawSprite(ctx, prop.sprite || 'veh_car', sx, sy, prop.width, prop.height);
             } else {
-                if (atlas?.isReady()) {
-                    atlas.drawSprite(ctx, 'prop_crate_wood', sx, sy, prop.width, prop.height);
-                } else {
-                    ctx.fillStyle = '#7c5329';
-                    ctx.fillRect(sx, sy, prop.width, prop.height);
+                atlas.drawSprite(ctx, 'prop_crate_wood_hd', sx, sy, prop.width, prop.height);
+            }
+        }
+    }
+
+    _renderMovableCrates(ctx, renderer, camX, camY) {
+        const atlas = this.engine.spriteAtlas;
+        if (!atlas?.isReady()) return;
+
+        for (const crate of this.movableCrates) {
+            const sx = Math.round(crate.x - camX);
+            const sy = Math.round(crate.y - camY);
+            if (sx + crate.width < -30 || sx > renderer.width + 30) continue;
+
+            atlas.drawSprite(ctx, crate.sprite || 'prop_crate_wood_hd', sx, sy, crate.width, crate.height);
+
+            if (this.player && !this.player.dead) {
+                const dist = Math.abs((this.player.x + this.player.width * 0.5) - (crate.x + crate.width * 0.5));
+                if (dist < 78 && Math.abs((this.player.y + this.player.height) - (crate.y + crate.height)) < 24) {
+                    ctx.save();
+                    ctx.font = 'bold 10px Consolas, monospace';
+                    ctx.fillStyle = '#05080d';
+                    ctx.fillText('⇄ CAJA MÓVIL', sx - 7, sy - 7);
+                    ctx.fillStyle = '#ffd166';
+                    ctx.fillText('⇄ CAJA MÓVIL', sx - 8, sy - 8);
+                    ctx.restore();
                 }
             }
         }
@@ -1340,24 +1431,22 @@ export class Level01 {
             const sy = Math.round(item.y - camY + Math.sin(this.time * 4 + item.x) * 3.5);
             if (sx < -40 || sx > renderer.width + 40) continue;
 
+            let glowCol = 'rgba(245, 166, 35, 0.36)';
+            let spriteKey = 'pickup_ammo';
             if (item.type === 'medkit') {
-                renderer.drawRadialGlow(sx + 16, sy + 16, 4, 38, 'rgba(56, 229, 125, 0.36)');
-                if (atlas?.isReady()) {
-                    atlas.drawSprite(ctx, 'icon_medkit', sx, sy, item.width, item.height);
-                } else {
-                    ctx.fillStyle = '#eef4f8';
-                    ctx.fillRect(sx, sy, item.width, item.height);
-                }
-            } else {
-                renderer.drawRadialGlow(sx + 16, sy + 16, 4, 38, 'rgba(245, 166, 35, 0.36)');
-                ctx.fillStyle = '#283627';
-                ctx.strokeStyle = '#f5a623';
-                ctx.lineWidth = 2;
-                ctx.fillRect(sx, sy + 3, item.width, item.height - 6);
-                ctx.strokeRect(sx, sy + 3, item.width, item.height - 6);
-                ctx.fillStyle = '#ffd166';
-                ctx.font = 'bold 10px Consolas, monospace';
-                ctx.fillText('AMMO', sx + 4, sy + 20);
+                glowCol = 'rgba(56, 229, 125, 0.38)';
+                spriteKey = 'pickup_medkit';
+            } else if (item.type === 'money') {
+                glowCol = 'rgba(72, 255, 138, 0.36)';
+                spriteKey = 'pickup_money';
+            } else if (item.type === 'points') {
+                glowCol = 'rgba(255, 215, 84, 0.42)';
+                spriteKey = 'pickup_points';
+            }
+
+            renderer.drawRadialGlow(sx + 18, sy + 16, 4, 38, glowCol);
+            if (atlas?.isReady()) {
+                atlas.drawSprite(ctx, spriteKey, sx, sy, item.width, item.height);
             }
         }
     }

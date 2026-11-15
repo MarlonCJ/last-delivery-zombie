@@ -5,7 +5,7 @@
  * recargas de munición, botiquines y mejoras permanentes.
  */
 
-import { WEAPON_CATALOG } from './InventorySystem.js';
+import { WEAPON_CATALOG, MAX_LOADOUT_SLOTS } from './InventorySystem.js';
 
 export const SHOP_SUPPLIES = Object.freeze([
     {
@@ -53,11 +53,13 @@ export class ShopSystem {
         return Object.values(WEAPON_CATALOG).map(spec => {
             const unlocked = this.inventory.isUnlocked(spec.id);
             const purchased = this.inventory.isPurchased(spec.id);
+            const inLoadout = this.inventory.isInLoadout(spec.id);
             const equipped = this.inventory.getEquippedWeapon().id === spec.id;
             return {
                 ...spec,
                 unlocked,
                 purchased,
+                inLoadout,
                 equipped,
                 canAfford: this.economy.getMoney() >= spec.price
             };
@@ -73,20 +75,33 @@ export class ShopSystem {
             return { ok: false, message: `Arma bloqueada. Requiere alcanzar el Nivel ${spec.unlockLevel}.` };
         }
         if (this.inventory.isPurchased(weaponId)) {
-            this.inventory.equipWeapon(weaponId);
-            return { ok: true, message: `${spec.name} equipada.` };
+            return this.inventory.toggleLoadoutWeapon(weaponId);
         }
         if (!this.economy.spendMoney(spec.price)) {
             return { ok: false, message: 'Fondos insuficientes para adquirir esta arma.' };
         }
 
         this.saveSystem.state.inventory.purchasedWeapons.push(weaponId);
-        this.saveSystem.state.inventory.ammoReserves[weaponId] = spec.defaultReserve;
-        this.inventory.magazines[weaponId] = spec.magazineSize;
-        this.inventory.equipWeapon(weaponId);
-        this.saveSystem.save();
+        if (spec.type === 'ranged') {
+            this.saveSystem.state.inventory.ammoReserves[weaponId] = spec.defaultReserve;
+            this.inventory.magazines[weaponId] = spec.magazineSize;
+        }
 
-        return { ok: true, message: `¡${spec.name} comprada y equipada!` };
+        const currentLoadout = this.inventory.getLoadout();
+        if (currentLoadout.length < MAX_LOADOUT_SLOTS) {
+            this.inventory.toggleLoadoutWeapon(weaponId);
+            this.saveSystem.save();
+            return {
+                ok: true,
+                message: `¡${spec.name} comprada y asignada a tu mochila (${this.inventory.getLoadout().length}/${MAX_LOADOUT_SLOTS})!`
+            };
+        }
+
+        this.saveSystem.save();
+        return {
+            ok: true,
+            message: `¡${spec.name} comprada! Tu mochila tiene ${MAX_LOADOUT_SLOTS}/${MAX_LOADOUT_SLOTS} armas: retira una si deseas llevarla.`
+        };
     }
 
     getSuppliesListing() {

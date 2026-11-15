@@ -175,9 +175,8 @@ export class MainMenu {
         this.engine.audio.unlock();
         this.engine.audio.playConfirm();
 
-        const lvl2Unlocked = this.engine.levels.isLevelUnlocked(2);
-        const nextTarget = lvl2Unlocked ? 'briefing' : 'level01';
-        this.engine.sceneManager.transitionTo('introduction', { playerName: savedName, targetScene: nextTarget }, 0.55);
+        // Siempre pasa por la Terminal Pre-Misión (briefing) tras la introducción para asignar las 3 armas antes de jugar
+        this.engine.sceneManager.transitionTo('introduction', { playerName: savedName, targetScene: 'briefing' }, 0.55);
     }
 
     _clearNameError() {
