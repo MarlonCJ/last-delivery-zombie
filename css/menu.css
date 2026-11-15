@@ -1,0 +1,578 @@
+/* ==========================================================================
+   menu.css — Portada principal, logotipo, credencial, Cómo Jugar y Opciones
+   ========================================================================== */
+
+#main-menu-overlay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 12px;
+}
+
+/* --- Logotipo Cinematográfico LAST DELIVERY ZOMBIE --- */
+.brand-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 6px;
+    filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.92));
+    animation: titleFloat 4.5s ease-in-out infinite;
+}
+
+@keyframes titleFloat {
+    0%, 100% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-3px);
+    }
+}
+
+.brand-logo-svg {
+    width: 515px;
+    height: 204px;
+    overflow: visible;
+}
+
+/* --- Panel Central de Portada (Nombre + Botonera) --- */
+.menu-center-stack {
+    width: 396px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 20;
+}
+
+/* Tarjeta metálica de identificación del protagonista */
+.courier-id-card {
+    background: linear-gradient(180deg, rgba(20, 26, 36, 0.95) 0%, rgba(11, 15, 22, 0.97) 100%);
+    border: 2px solid #3c4a5e;
+    border-left: 4px solid var(--amber-warn);
+    border-radius: 5px;
+    padding: 8px 14px 9px;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.85);
+}
+
+.courier-id-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--amber-warn);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+}
+
+.courier-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(5, 8, 13, 0.9);
+    border: 1px solid #2e3b4e;
+    border-radius: 4px;
+    padding: 5px 10px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.courier-input-row:focus-within {
+    border-color: var(--blood-bright);
+    box-shadow: 0 0 10px rgba(224, 30, 43, 0.4);
+}
+
+.courier-badge-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+#player-name-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #ffffff;
+    font-family: var(--font-ui);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    user-select: text;
+}
+
+#player-name-input::placeholder {
+    color: #5b6b80;
+    font-weight: 500;
+}
+
+.courier-feedback {
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #7992ad;
+    min-height: 15px;
+}
+
+.courier-feedback.is-error {
+    color: #ff5c66;
+    font-weight: 700;
+}
+
+.mission-progression-badge {
+    margin-top: 6px;
+    padding: 5px 10px;
+    background: rgba(8, 13, 21, 0.92);
+    border: 1px solid #2f4056;
+    border-left: 3px solid var(--amber-warn);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #d6e4f5;
+    letter-spacing: 0.3px;
+}
+
+.mission-progression-badge.is-unlocked {
+    border-left-color: #38e57d;
+    color: #84ffB5;
+}
+
+.mission-chip {
+    background: rgba(9, 14, 22, 0.92);
+    border: 1px solid #334357;
+    border-radius: 4px;
+    color: #9cb0c9;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    padding: 5px 8px;
+    cursor: pointer;
+    transition: all 0.16s ease;
+}
+
+.mission-chip:hover:not(:disabled) {
+    border-color: #6b84a3;
+    color: #ffffff;
+}
+
+.mission-chip:disabled {
+    opacity: 0.52;
+    border-color: #3a262c;
+    color: #7c6d75;
+    cursor: not-allowed;
+}
+
+.mission-chip.is-active {
+    background: linear-gradient(180deg, #b81926 0%, #780d16 100%);
+    border-color: #ff5a67;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(224, 30, 43, 0.35);
+}
+
+@keyframes errorShake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-7px); }
+    40%, 80% { transform: translateX(7px); }
+}
+
+.input-error-shake {
+    border-color: var(--blood-bright) !important;
+    animation: errorShake 0.34s ease;
+}
+
+/* --- Botones Industriales Metálicos de la Portada --- */
+.menu-btn {
+    position: relative;
+    width: 100%;
+    height: 50px;
+    padding: 0 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: linear-gradient(180deg, #26303f 0%, #151b24 52%, #0e131a 100%);
+    border: 2px solid #455468;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-size: 20px;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95);
+    cursor: pointer;
+    box-shadow:
+        0 6px 16px rgba(0, 0, 0, 0.8),
+        inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.menu-btn:hover {
+    transform: translateY(-2px) scale(1.015);
+    border-color: #889bb5;
+    background: linear-gradient(180deg, #313e52 0%, #1d2633 52%, #131a24 100%);
+    box-shadow:
+        0 8px 22px rgba(0, 0, 0, 0.92),
+        0 0 14px rgba(170, 200, 235, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.menu-btn:active {
+    transform: translateY(1px) scale(0.995);
+}
+
+/* Botón Principal Carmesí: INICIAR JUEGO */
+.menu-btn.menu-btn-primary {
+    height: 58px;
+    font-size: 23px;
+    background: linear-gradient(180deg, #c71b27 0%, #8a0f18 55%, #5c080f 100%);
+    border-color: #ff4754;
+    box-shadow:
+        0 8px 22px rgba(0, 0, 0, 0.9),
+        0 0 18px rgba(224, 30, 43, 0.45),
+        inset 0 1px 0 rgba(255, 190, 190, 0.35);
+}
+
+.menu-btn.menu-btn-primary:hover {
+    background: linear-gradient(180deg, #df2330 0%, #a3131e 55%, #6e0a12 100%);
+    border-color: #ff8089;
+    box-shadow:
+        0 10px 26px rgba(0, 0, 0, 0.95),
+        0 0 26px rgba(255, 45, 58, 0.65),
+        inset 0 1px 0 rgba(255, 215, 215, 0.45);
+}
+
+.menu-btn-icon {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.sound-pill {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.8px;
+}
+
+.sound-pill.is-on {
+    color: #3cff84;
+    background: rgba(24, 130, 62, 0.35);
+    border: 1px solid rgba(60, 255, 132, 0.55);
+}
+
+.sound-pill.is-off {
+    color: #ff5c66;
+    background: rgba(140, 22, 32, 0.38);
+    border: 1px solid rgba(255, 92, 102, 0.55);
+}
+
+/* Pie sutil de versión en portada */
+.menu-footer-meta {
+    position: absolute;
+    bottom: 10px;
+    right: 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: rgba(185, 205, 225, 0.52);
+    letter-spacing: 0.8px;
+    pointer-events: none;
+}
+
+/* --- Modal CÓMO JUGAR --- */
+.howto-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid #283446;
+    padding-bottom: 12px;
+}
+
+.howto-tab-btn {
+    padding: 8px 18px;
+    background: #171f2b;
+    border: 1px solid #354357;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-family: var(--font-display);
+    font-size: 15px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.howto-tab-btn.active,
+.howto-tab-btn:hover {
+    background: #7f141d;
+    border-color: #ff5460;
+    color: #ffffff;
+}
+
+.controls-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.control-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(18, 25, 36, 0.9);
+    border: 1px solid #2c394d;
+    border-left: 3px solid var(--blood-bright);
+    border-radius: 4px;
+}
+
+.control-action-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.keycap-badge {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffcf6e;
+    background: #0d121a;
+    border: 1px solid #485870;
+    border-bottom-width: 3px;
+    border-radius: 4px;
+    padding: 4px 10px;
+}
+
+.howto-note {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: rgba(245, 166, 35, 0.09);
+    border: 1px solid rgba(245, 166, 35, 0.35);
+    border-radius: 4px;
+    font-size: 13px;
+    color: #f3ce85;
+}
+
+.survival-guide-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.guide-card {
+    background: rgba(17, 23, 34, 0.92);
+    border: 1px solid #2b384b;
+    border-radius: 5px;
+    padding: 12px 14px;
+}
+
+.guide-card h4 {
+    font-family: var(--font-display);
+    font-size: 15px;
+    letter-spacing: 0.9px;
+    color: #ff616d;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
+.guide-card p {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+/* --- Modal OPCIONES --- */
+.options-columns {
+    display: grid;
+    grid-template-columns: 1fr 1.15fr;
+    gap: 22px;
+}
+
+.options-section-title {
+    font-family: var(--font-display);
+    font-size: 16px;
+    letter-spacing: 1px;
+    color: var(--amber-warn);
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #283446;
+    text-transform: uppercase;
+}
+
+.option-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    gap: 12px;
+}
+
+.option-label {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.option-slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 190px;
+}
+
+.option-slider-wrap input[type="range"] {
+    flex: 1;
+    accent-color: var(--blood-bright);
+    cursor: pointer;
+}
+
+.option-val {
+    width: 40px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.option-toggle-btn,
+.option-select,
+.secondary-action-btn {
+    background: #192230;
+    color: var(--text-primary);
+    border: 1px solid #3d4d63;
+    border-radius: 4px;
+    padding: 7px 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.option-toggle-btn.is-on {
+    border-color: #38e57d;
+    color: #54ff97;
+    background: rgba(24, 110, 56, 0.28);
+}
+
+.option-toggle-btn.is-off {
+    border-color: #ff5460;
+    color: #ff737d;
+    background: rgba(125, 20, 28, 0.28);
+}
+
+.secondary-action-btn:hover {
+    background: #28364a;
+    border-color: #758ca8;
+}
+
+.danger-action-btn {
+    background: rgba(110, 14, 22, 0.45);
+    border-color: #a82531;
+    color: #ff8c95;
+}
+
+.danger-action-btn:hover {
+    background: #9e1622;
+    border-color: #ff5c68;
+    color: #ffffff;
+}
+
+.rebind-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.rebind-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: rgba(13, 18, 27, 0.85);
+    border: 1px solid #263244;
+    border-radius: 4px;
+}
+
+.rebind-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.rebind-btn {
+    min-width: 145px;
+    padding: 5px 10px;
+    background: #18212e;
+    border: 1px solid #3f5068;
+    border-radius: 4px;
+    color: #ffd37a;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.rebind-btn:hover:not(:disabled) {
+    border-color: var(--blood-bright);
+    color: #ffffff;
+}
+
+.rebind-btn.listening {
+    background: #7c141d;
+    border-color: #ff6974;
+    color: #ffffff;
+    animation: pulseBorder 0.9s infinite alternate;
+}
+
+.rebind-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+@keyframes pulseBorder {
+    from { box-shadow: 0 0 4px rgba(255, 65, 78, 0.4); }
+    to { box-shadow: 0 0 14px rgba(255, 65, 78, 0.95); }
+}
+
+/* --- Pantalla de Desconexión Segura (SALIR) --- */
+#exit-standby-screen {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at center, #11090d 0%, #030407 85%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    text-align: center;
+    padding: 32px;
+    pointer-events: auto;
+    z-index: 80;
+}
+
+.standby-code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--blood-bright);
+    letter-spacing: 2px;
+}
+
+.standby-title {
+    font-family: var(--font-display);
+    font-size: 38px;
+    letter-spacing: 2px;
+    color: var(--text-primary);
+}
+
+.standby-desc {
+    max-width: 520px;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}

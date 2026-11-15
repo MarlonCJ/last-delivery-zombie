@@ -1,0 +1,249 @@
+/* ==========================================================================
+   main.css — Variables globales, escalado adaptable 16:9 y base Survival Horror
+   Proyecto: LAST DELIVERY ZOMBIE
+   ========================================================================== */
+
+:root {
+    --bg-void: #030508;
+    --panel-bg: rgba(12, 16, 24, 0.94);
+    --panel-border: #2e394a;
+    --steel-dark: #141922;
+    --steel-mid: #1e2633;
+    --steel-light: #394659;
+
+    --blood-bright: #e01e2b;
+    --blood-mid: #a6121d;
+    --blood-dark: #59080f;
+    --amber-warn: #f5a623;
+    --bio-green: #38e57d;
+
+    --text-primary: #eef3f8;
+    --text-secondary: #a5b4c7;
+    --text-muted: #6c7c91;
+
+    --font-display: Impact, 'Arial Black', 'Franklin Gothic Heavy', sans-serif;
+    --font-ui: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --font-mono: Consolas, 'Courier New', monospace;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--bg-void);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Contenedor centrado de pantalla completa */
+#viewport-wrapper {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at center, #0a0f18 0%, #020306 100%);
+}
+
+/* Escenario adaptable 16:9 controlado por Renderer2D */
+#game-stage {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    --ui-scale: 1;
+    overflow: hidden;
+    background-color: #05070c;
+    box-shadow:
+        0 0 60px rgba(0, 0, 0, 0.95),
+        0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+#game-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Capa UI escalada exactamente 1:1 sobre el espacio lógico 1280x720 */
+#ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1280px;
+    height: 720px;
+    transform: scale(var(--ui-scale, 1));
+    transform-origin: top left;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Líneas de escaneo sutiles de atmósfera nocturna */
+#ui-layer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0) 0px,
+        rgba(255, 255, 255, 0) 3px,
+        rgba(0, 0, 0, 0.11) 4px
+    );
+    z-index: 90;
+}
+
+.scene-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: auto;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Utilidades de botones industriales con remaches */
+.rivet-plate {
+    position: relative;
+}
+
+.rivet-plate::before,
+.rivet-plate::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #8a99ad, #1b222c);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+    pointer-events: none;
+}
+
+.rivet-plate::before {
+    left: 10px;
+}
+
+.rivet-plate::after {
+    right: 10px;
+}
+
+/* Modales globales */
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(3, 5, 10, 0.84);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    z-index: 60;
+    animation: modalFadeIn 0.18s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.modal-window {
+    width: 860px;
+    max-height: 640px;
+    background: linear-gradient(180deg, #121822 0%, #0b0f17 100%);
+    border: 2px solid var(--steel-light);
+    box-shadow:
+        0 20px 55px rgba(0, 0, 0, 0.92),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modal-window.modal-compact {
+    width: 520px;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    background: linear-gradient(90deg, #240c11 0%, #141b26 65%);
+    border-bottom: 2px solid #7d1720;
+}
+
+.modal-title {
+    font-family: var(--font-display);
+    font-size: 24px;
+    letter-spacing: 1.5px;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+
+.modal-close-btn {
+    background: #1b2330;
+    color: var(--text-secondary);
+    border: 1px solid #3a485e;
+    border-radius: 4px;
+    padding: 6px 14px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.modal-close-btn:hover {
+    background: var(--blood-mid);
+    border-color: #ff525e;
+    color: #ffffff;
+}
+
+.modal-body {
+    padding: 20px 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+    background: #090c12;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+    background: #2e3b4e;
+    border-radius: 4px;
+}
+
+.modal-footer {
+    padding: 14px 24px;
+    background: #0c1018;
+    border-top: 1px solid #232d3d;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}

@@ -1,0 +1,1446 @@
+/**
+ * Level02.js
+ * Segundo Nivel Jugable Completo: "PABELLÓN DE URGENCIAS — HOSPITAL Y SECTOR B-3" (12,000 px).
+ * Recorrido interior extenso dividido en 3 alas interconectadas:
+ *   1) Hospital General y Sala de Emergencias (0 - 4,000 px)
+ *   2) Bloque Quirúrgico en Apagón (4,000 - 8,200 px)
+ *   3) Subsuelo Biotech Labs Sector B-3 con cápsulas mutagénicas y fosas de ácido (8,200 - 12,000 px)
+ * Incluye Mutantes Escupidores ('spitter'), fosas corrosivas salvables por pasarelas, puestos de control
+ * médicos y Jefe Final de Nivel 02: PACIENTE CERO — ABERRACIÓN BIO-ÁCIDA (1,150 HP).
+ */
+
+import { Camera2D } from '../core/Camera2D.js';
+import { CollisionSystem } from '../core/CollisionSystem.js';
+import { Player } from '../entities/Player.js';
+import { Zombie } from '../entities/Zombie.js';
+import { Boss } from '../entities/Boss.js';
+import { CombatSystem } from '../systems/CombatSystem.js';
+
+const WORLD_WIDTH = 12000;
+const WORLD_HEIGHT = 720;
+const GROUND_Y = 590;
+const ARENA_LOCK_X = 10540;
+
+export class Level02 {
+    constructor(engine) {
+        this.engine = engine;
+        this.camera = new Camera2D(1280, 720, WORLD_WIDTH, WORLD_HEIGHT);
+        this.isSceneActive = false;
+
+        this.player = null;
+        this.enemies = [];
+        this.boss = null;
+        this.platforms = [];
+        this.ladders = [];
+        this.destructibles = [];
+        this.hazards = [];
+        this.acidPits = [];
+        this.checkpoints = [];
+        this.ceilingLights = [];
+        this.stasisPods = [];
+        this.hospitalProps = [];
+        this.foregroundColumns = [];
+        this.pickups = [];
+        this.combat = null;
+
+        // Puntos clave de entrega del Nivel 02 con escala humana simétrica
+        this.pickupStation = { x: 240, y: GROUND_Y - 126, width: 122, height: 126 };
+        this.deliveryStation = { x: 10760, y: GROUND_Y - 138, width: 140, height: 138 };
+
+        // Estadísticas de la misión
+        this.elapsedTime = 0;
+        this.zombiesKilled = 0;
+        this.moneyEarnedInRun = 0;
+        this.scoreEarnedInRun = 0;
+        this.startMoneySnapshot = 0;
+        this.startScoreSnapshot = 0;
+
+        // Estados de escena
+        this.paused = false;
+        this.inventoryOpen = false;
+        this.levelCompleted = false;
+        this.defeatTimer = 0;
+        this.bossSpawned = false;
+        this.arenaLocked = false;
+        this.time = 0;
+        this._lastAvatarKey = '';
+
+        this._cacheDomElements();
+        this._bindHudEvents();
+    }
+
+    _cacheDomElements() {
+        this.hudOverlay = document.getElementById('hud-overlay');
+        this.hudMissionHeader = document.getElementById('hud-mission-header');
+        this.hudAvatarCanvas = document.getElementById('hud-avatar-canvas');
+        this.hudPlayerName = document.getElementById('hud-player-name');
+        this.hudHealthFill = document.getElementById('hud-health-fill');
+        this.hudHealthText = document.getElementById('hud-health-text');
+        this.hudMoney = document.getElementById('hud-money');
+        this.hudScore = document.getElementById('hud-score');
+        this.hudPackageState = document.getElementById('hud-package-state');
+        this.hudObjectiveText = document.getElementById('hud-objective-text');
+        this.hudProgressFill = document.getElementById('hud-delivery-fill');
+        this.hudWeaponName = document.getElementById('hud-weapon-name');
+        this.hudAmmoText = document.getElementById('hud-ammo-text');
+        this.hudMedkitCount = document.getElementById('hud-medkit-count');
+
+        this.bossBarWrap = document.getElementById('hud-boss-bar');
+        this.bossNameText = document.getElementById('hud-boss-name');
+        this.bossHealthFill = document.getElementById('hud-boss-fill');
+        this.bossHealthText = document.getElementById('hud-boss-hp-text');
+
+        this.inventoryPanel = document.getElementById('ingame-inventory-panel');
+        this.inventorySlotsContainer = document.getElementById('ingame-inventory-slots');
+        this.btnUseMedkitUI = document.getElementById('btn-inv-use-medkit');
+        this.btnCloseInventory = document.getElementById('btn-inv-close');
+
+        this.pausePanel = document.getElementById('ingame-pause-panel');
+        this.btnPauseResume = document.getElementById('btn-pause-resume');
+        this.btnPauseOptions = document.getElementById('btn-pause-options');
+        this.btnPauseRestart = document.getElementById('btn-pause-restart');
+        this.btnPauseMenu = document.getElementById('btn-pause-menu');
+
+        this.victoryPanel = document.getElementById('level-victory-panel');
+        this.victoryMissionTitle = document.getElementById('victory-mission-title');
+        this.resScore = document.getElementById('res-score');
+        this.resZombies = document.getElementById('res-zombies');
+        this.resCombatMoney = document.getElementById('res-combat-money');
+        this.resLevelReward = document.getElementById('res-level-reward');
+        this.resTime = document.getElementById('res-time');
+        this.btnVictoryShop = document.getElementById('btn-victory-shop');
+        this.btnVictoryContinue = document.getElementById('btn-victory-continue');
+    }
+
+    _bindHudEvents() {
+        this.btnCloseInventory?.addEventListener('click', () => {
+            if (!this.isSceneActive) return;
+            this.engine.audio.playClick();
+            this._setInventoryOpen(false);
+        });
+
+        this.btnUseMedkitUI?.addEventListener('click', () => {
+            if (!this.isSceneActive) return;
+            if (this.player?.tryUseMedkit({
+                onFloatingText: (x, y, t, c) => this.combat.spawnFloatingText(x, y, t, c)
+            })) {
+                this._renderInventorySlots();
+                this._syncHud();
+            }
+        });
+
+        this.btnPauseResume?.addEventListener('click', () => {
+            if (!this.isSceneActive) return;
+            this.engine.audio.playClick();
+            this._setPaused(false);
+        });
+
+        this.btnPauseOptions?.addEventListener('click', () => {
+            if (!this.isSceneActive) return;
+            this.engine.audio.playClick();
+            window.dispatchEvent(new CustomEvent('ldz:open-modal', { detail: { modal: 'options' } }));
+        });
+
+        this.btnPauseRestart?.addEventListener('click', () => {
+            if (!this.isSceneActive) return;
+            this.engine.audio.playClick();
+            this._setPaused(false);
+            this.engine.sceneManager.transitionTo('level02', {}, 0.35);
+        });
+
+        this.btnPauseMenu?.addEventListener('click', () => {
+            if (!this.isSceneActive) return;
+            this.engine.audio.playClick();
+            this._setPaused(false);
+            this.engine.sceneManager.transitionTo('mainMenu', {}, 0.45);
+        });
+
+        this.btnVictoryShop?.addEventListener('click', () => {
+            if (!this.isSceneActive) return;
+            this.engine.audio.playClick();
+            this.victoryPanel?.classList.add('hidden');
+            this.engine.sceneManager.transitionTo('shop', { fromLevel: 2, nextScene: 'level02' }, 0.45);
+        });
+
+        this.btnVictoryContinue?.addEventListener('click', () => {
+            if (!this.isSceneActive) return;
+            this.engine.audio.playConfirm();
+            this.victoryPanel?.classList.add('hidden');
+            this.engine.sceneManager.transitionTo('briefing', { levelId: 2 }, 0.45);
+        });
+    }
+
+    enter() {
+        // Progresión estrictamente secuencial: no se permite jugar Nivel 02 sin haber superado el Nivel 01
+        if (!this.engine.levels.isLevelUnlocked(2)) {
+            this.engine.sceneManager.switchImmediate('level01');
+            return;
+        }
+
+        this.isSceneActive = true;
+        this.time = 0;
+        this.elapsedTime = 0;
+        this.zombiesKilled = 0;
+        this.paused = false;
+        this.inventoryOpen = false;
+        this.levelCompleted = false;
+        this.defeatTimer = 0;
+        this.bossSpawned = false;
+        this.arenaLocked = false;
+        this.boss = null;
+        this._lastAvatarKey = '';
+
+        if (this.hudMissionHeader) {
+            this.hudMissionHeader.textContent = '🎯 MISIÓN 02: PABELLÓN DE URGENCIAS';
+        }
+        if (this.victoryMissionTitle) {
+            this.victoryMissionTitle.textContent = '¡MISIÓN COMPLETADA: PABELLÓN DE URGENCIAS!';
+        }
+        if (this.btnVictoryContinue) {
+            this.btnVictoryContinue.textContent = 'EXPEDIENTE OPERATIVO ▶';
+        }
+
+        this.engine.inventory.resetMissionLoadout();
+        this.startMoneySnapshot = this.engine.economy.getMoney();
+        this.startScoreSnapshot = this.engine.economy.getScore();
+
+        this.camera.setBounds(0, WORLD_WIDTH);
+        this._buildWorldGeometry();
+        this._spawnInitialEntities();
+
+        this.combat = new CombatSystem({
+            audio: this.engine.audio,
+            economy: this.engine.economy,
+            camera: this.camera,
+            onEnemyKilled: (enemy) => {
+                if (!enemy.isBoss) {
+                    this.zombiesKilled += 1;
+                } else {
+                    this._handleBossDefeated();
+                }
+            },
+            onCrateBroken: (crate, cx, cy) => {
+                if (crate.loot === 'money') {
+                    this.engine.economy.addMoney(30);
+                    this.combat.spawnFloatingText(cx - 16, cy - 12, '+$30 SUMINISTRO', '#47ff8c');
+                } else {
+                    this.engine.inventory.addAmmo('pistol_9mm', 16);
+                    this.combat.spawnFloatingText(cx - 24, cy - 12, '+16 MUNICIÓN', '#ffd166');
+                }
+                this.engine.audio.playPickup();
+            }
+        });
+
+        this.camera.x = 0;
+        this.hudOverlay?.classList.remove('hidden');
+        this.bossBarWrap?.classList.add('hidden');
+        this.inventoryPanel?.classList.add('hidden');
+        this.pausePanel?.classList.add('hidden');
+        this.victoryPanel?.classList.add('hidden');
+
+        this._syncHud();
+        this.engine.audio.startAmbience('intro');
+    }
+
+    exit() {
+        this.isSceneActive = false;
+        this.hudOverlay?.classList.add('hidden');
+        this.inventoryPanel?.classList.add('hidden');
+        this.pausePanel?.classList.add('hidden');
+        this.victoryPanel?.classList.add('hidden');
+    }
+
+    _buildWorldGeometry() {
+        // Suelo continuo clínico/subterráneo + pasarelas quirúrgicas y de laboratorio B-3
+        this.platforms = [
+            { x: 0, y: GROUND_Y, width: WORLD_WIDTH, height: 150, kind: 'ground', oneWay: false },
+
+            // ALA A (0 - 4000): Hospital General y Sala de Emergencias
+            { x: 640, y: GROUND_Y - 46, width: 92, height: 46, kind: 'barrier_concrete', oneWay: false },
+            { x: 820, y: GROUND_Y - 152, width: 290, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 1320, y: GROUND_Y - 62, width: 68, height: 62, kind: 'metal_crate', oneWay: false },
+            { x: 1680, y: GROUND_Y - 156, width: 310, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 2210, y: GROUND_Y - 46, width: 92, height: 46, kind: 'barrier_concrete', oneWay: false },
+            { x: 2560, y: GROUND_Y - 152, width: 320, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 2740, y: GROUND_Y - 278, width: 240, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 3260, y: GROUND_Y - 62, width: 68, height: 62, kind: 'metal_crate', oneWay: false },
+            { x: 3560, y: GROUND_Y - 154, width: 300, height: 18, kind: 'lab_catwalk', oneWay: true },
+
+            // ALA B (4000 - 8200): Bloque Quirúrgico en Apagón
+            { x: 4320, y: GROUND_Y - 46, width: 92, height: 46, kind: 'barrier_concrete', oneWay: false },
+            { x: 4620, y: GROUND_Y - 154, width: 340, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 5180, y: GROUND_Y - 62, width: 68, height: 62, kind: 'metal_crate', oneWay: false },
+            { x: 5480, y: GROUND_Y - 148, width: 380, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 5680, y: GROUND_Y - 276, width: 250, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 6160, y: GROUND_Y - 46, width: 92, height: 46, kind: 'barrier_concrete', oneWay: false },
+            { x: 6520, y: GROUND_Y - 152, width: 390, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 7140, y: GROUND_Y - 62, width: 68, height: 62, kind: 'metal_crate', oneWay: false },
+            { x: 7440, y: GROUND_Y - 156, width: 360, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 7920, y: GROUND_Y - 46, width: 92, height: 46, kind: 'barrier_concrete', oneWay: false },
+
+            // ALA C (8200 - 12000): Subsuelo Biotech Labs Sector B-3 (pasarelas sobre fosas de ácido)
+            { x: 8420, y: GROUND_Y - 138, width: 420, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 9040, y: GROUND_Y - 142, width: 440, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 9220, y: GROUND_Y - 270, width: 250, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 9680, y: GROUND_Y - 138, width: 430, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 10240, y: GROUND_Y - 62, width: 68, height: 62, kind: 'metal_crate', oneWay: false },
+
+            // Pasarelas de combate en la Arena del Reactor B-3 (Paciente Cero)
+            { x: 10980, y: GROUND_Y - 148, width: 245, height: 18, kind: 'lab_catwalk', oneWay: true },
+            { x: 11510, y: GROUND_Y - 148, width: 245, height: 18, kind: 'lab_catwalk', oneWay: true }
+        ];
+
+        // Escaleras industriales hacia pasarelas y niveles superiores
+        this.ladders = [
+            { x: 836, y: GROUND_Y - 152, width: 38, height: 152 },
+            { x: 1696, y: GROUND_Y - 156, width: 38, height: 156 },
+            { x: 2576, y: GROUND_Y - 152, width: 38, height: 152 },
+            { x: 2758, y: GROUND_Y - 278, width: 38, height: 128 },
+            { x: 3576, y: GROUND_Y - 154, width: 38, height: 154 },
+            { x: 4638, y: GROUND_Y - 154, width: 38, height: 154 },
+            { x: 5498, y: GROUND_Y - 148, width: 38, height: 148 },
+            { x: 5698, y: GROUND_Y - 276, width: 38, height: 130 },
+            { x: 6538, y: GROUND_Y - 152, width: 38, height: 152 },
+            { x: 7458, y: GROUND_Y - 156, width: 38, height: 156 },
+            { x: 8436, y: GROUND_Y - 138, width: 38, height: 138 },
+            { x: 9056, y: GROUND_Y - 142, width: 38, height: 142 },
+            { x: 9238, y: GROUND_Y - 270, width: 38, height: 130 },
+            { x: 9696, y: GROUND_Y - 138, width: 38, height: 138 },
+            { x: 10998, y: GROUND_Y - 148, width: 38, height: 148 },
+            { x: 11705, y: GROUND_Y - 148, width: 38, height: 148 }
+        ];
+
+        // Fosas químicas de ácido mutagénico verde en el Ala B y Sector B-3 (cruzables por pasarela o salto)
+        this.acidPits = [
+            { x: 5560, y: GROUND_Y - 16, width: 220, height: 28, damage: 18 },
+            { x: 6610, y: GROUND_Y - 16, width: 230, height: 28, damage: 18 },
+            { x: 8510, y: GROUND_Y - 16, width: 250, height: 28, damage: 20 },
+            { x: 9130, y: GROUND_Y - 16, width: 260, height: 28, damage: 20 },
+            { x: 9770, y: GROUND_Y - 16, width: 250, height: 28, damage: 20 }
+        ];
+
+        // Trampas cortantes / escombros quirúrgicos
+        this.hazards = [
+            { x: 1490, y: GROUND_Y - 26, width: 112, height: 26, damage: 16 },
+            { x: 3060, y: GROUND_Y - 26, width: 112, height: 26, damage: 16 },
+            { x: 4980, y: GROUND_Y - 26, width: 112, height: 26, damage: 16 },
+            { x: 7260, y: GROUND_Y - 26, width: 112, height: 26, damage: 16 }
+        ];
+
+        // Estaciones médicas de control intermedio
+        this.checkpoints = [
+            { x: 4060, y: GROUND_Y - 104, width: 82, height: 104, label: 'UCI ALFA', reached: false },
+            { x: 8110, y: GROUND_Y - 104, width: 82, height: 104, label: 'ESCLUSA B-3', reached: false }
+        ];
+
+        // Cajas de suministros y barriles bioquímicos explosivos (20 en total)
+        this.destructibles = [
+            { x: 745, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'money', destroyed: false },
+            { x: 1140, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
+            { x: 1840, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false },
+            { x: 2040, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
+            { x: 2890, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'money', destroyed: false },
+            { x: 3420, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
+            { x: 3890, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false },
+            { x: 4480, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
+            { x: 4840, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'money', destroyed: false },
+            { x: 5340, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
+            { x: 6020, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false },
+            { x: 6360, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
+            { x: 7020, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'money', destroyed: false },
+            { x: 7690, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
+            { x: 8310, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false },
+            { x: 8910, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
+            { x: 9560, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'money', destroyed: false },
+            { x: 10140, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
+            // Arena de Paciente Cero
+            { x: 11290, y: GROUND_Y - 64, width: 46, height: 64, kind: 'barrel_red', hp: 30, destroyed: false },
+            { x: 11840, y: GROUND_Y - 52, width: 54, height: 52, kind: 'crate_wood', hp: 35, loot: 'ammo', destroyed: false }
+        ];
+
+        // Tubos fluorescentes y balizas de emergencia en el techo
+        this.ceilingLights = [];
+        for (let x = 220; x < WORLD_WIDTH - 180; x += 480) {
+            const mode = x < 4000 ? 'hospital' : x < 8200 ? 'blackout_red' : 'biolab_green';
+            this.ceilingLights.push({ x, mode });
+        }
+
+        // Cápsulas gigantes de estasis mutagénica en el Sector B-3 (8,200 - 11,900 px)
+        this.stasisPods = [
+            { x: 8360, broken: false, specimen: 'znormal_walk' },
+            { x: 8820, broken: true, specimen: null },
+            { x: 9360, broken: false, specimen: 'zspecial_prepare' },
+            { x: 9920, broken: true, specimen: null },
+            { x: 10420, broken: false, specimen: 'zfast_run' },
+            { x: 11260, broken: true, specimen: null },
+            { x: 11760, broken: false, specimen: 'zspecial_prepare' }
+        ];
+
+        // Mobiliario clínico de terror (sillas de sala de espera, sillas de ruedas, camillas ensangrentadas, consolas ADN)
+        this.hospitalProps = [
+            { x: 430, kind: 'chairs' },
+            { x: 980, kind: 'wheelchair' },
+            { x: 1210, kind: 'emergency_doors' },
+            { x: 1920, kind: 'stretcher' },
+            { x: 2420, kind: 'emergency_doors' },
+            { x: 3180, kind: 'wheelchair' },
+            { x: 3740, kind: 'stretcher' },
+            { x: 4520, kind: 'emergency_doors' },
+            { x: 5280, kind: 'stretcher' },
+            { x: 6280, kind: 'wheelchair' },
+            { x: 6940, kind: 'emergency_doors' },
+            { x: 7820, kind: 'stretcher' },
+            { x: 8680, kind: 'dna_console' },
+            { x: 9490, kind: 'dna_console' },
+            { x: 10330, kind: 'dna_console' },
+            { x: 11420, kind: 'dna_console' }
+        ];
+
+        // Columnas oscuras de primerísimo plano (parallax 1.24x)
+        this.foregroundColumns = [];
+        for (let x = 520; x < WORLD_WIDTH * 1.25; x += 920) {
+            this.foregroundColumns.push(x);
+        }
+
+        // Botiquines y munición repartidos en pasarelas y quirófanos (14 puntos)
+        this.pickups = [
+            { x: 945, y: GROUND_Y - 190, width: 32, height: 32, type: 'ammo', taken: false },
+            { x: 1820, y: GROUND_Y - 194, width: 32, height: 32, type: 'medkit', taken: false },
+            { x: 2840, y: GROUND_Y - 316, width: 32, height: 32, type: 'ammo', taken: false },
+            { x: 2890, y: GROUND_Y - 316, width: 32, height: 32, type: 'medkit', taken: false },
+            { x: 3710, y: GROUND_Y - 192, width: 32, height: 32, type: 'ammo', taken: false },
+            { x: 4780, y: GROUND_Y - 192, width: 32, height: 32, type: 'medkit', taken: false },
+            { x: 5790, y: GROUND_Y - 314, width: 32, height: 32, type: 'ammo', taken: false },
+            { x: 6710, y: GROUND_Y - 190, width: 32, height: 32, type: 'medkit', taken: false },
+            { x: 7620, y: GROUND_Y - 194, width: 32, height: 32, type: 'ammo', taken: false },
+            { x: 8620, y: GROUND_Y - 176, width: 32, height: 32, type: 'medkit', taken: false },
+            { x: 9330, y: GROUND_Y - 308, width: 32, height: 32, type: 'ammo', taken: false },
+            { x: 9890, y: GROUND_Y - 176, width: 32, height: 32, type: 'medkit', taken: false },
+            { x: 11085, y: GROUND_Y - 186, width: 32, height: 32, type: 'ammo', taken: false },
+            { x: 11610, y: GROUND_Y - 186, width: 32, height: 32, type: 'medkit', taken: false }
+        ];
+    }
+
+    _spawnInitialEntities() {
+        const atlas = this.engine.spriteAtlas;
+
+        this.player = new Player({
+            x: 80,
+            y: GROUND_Y - 108,
+            inventory: this.engine.inventory,
+            audio: this.engine.audio,
+            spriteAtlas: atlas
+        });
+
+        // 28 enemigos de tamaño humano simétrico y alta peligrosidad
+        this.enemies = [
+            // Ala A: Recepción y Urgencias
+            new Zombie('normal', { x: 560, y: GROUND_Y - 104, patrolMinX: 480, patrolMaxX: 625, spriteAtlas: atlas }),
+            new Zombie('fast', { x: 920, y: GROUND_Y - 100, patrolMinX: 810, patrolMaxX: 1260, spriteAtlas: atlas }),
+            new Zombie('normal', { x: 1190, y: GROUND_Y - 104, patrolMinX: 980, patrolMaxX: 1300, spriteAtlas: atlas }),
+            new Zombie('spitter', { x: 1760, y: GROUND_Y - 104, patrolMinX: 1630, patrolMaxX: 1990, spriteAtlas: atlas }),
+            new Zombie('fast', { x: 2090, y: GROUND_Y - 100, patrolMinX: 1880, patrolMaxX: 2195, spriteAtlas: atlas }),
+            new Zombie('normal', { x: 2440, y: GROUND_Y - 104, patrolMinX: 2330, patrolMaxX: 2680, spriteAtlas: atlas }),
+            new Zombie('special', { x: 2790, y: GROUND_Y - 110, patrolMinX: 2580, patrolMaxX: 3020, spriteAtlas: atlas }),
+            new Zombie('spitter', { x: 3480, y: GROUND_Y - 104, patrolMinX: 3350, patrolMaxX: 3720, spriteAtlas: atlas }),
+            new Zombie('fast', { x: 3790, y: GROUND_Y - 100, patrolMinX: 3560, patrolMaxX: 3980, spriteAtlas: atlas }),
+
+            // Ala B: Bloque Quirúrgico en Apagón
+            new Zombie('fast', { x: 4460, y: GROUND_Y - 100, patrolMinX: 4420, patrolMaxX: 4820, spriteAtlas: atlas }),
+            new Zombie('spitter', { x: 4760, y: GROUND_Y - 104, patrolMinX: 4580, patrolMaxX: 4940, spriteAtlas: atlas }),
+            new Zombie('special', { x: 5290, y: GROUND_Y - 110, patrolMinX: 5260, patrolMaxX: 5520, spriteAtlas: atlas }),
+            new Zombie('fast', { x: 5620, y: GROUND_Y - 100 - 148, patrolMinX: 5500, patrolMaxX: 5830, spriteAtlas: atlas }),
+            new Zombie('normal', { x: 5960, y: GROUND_Y - 104, patrolMinX: 5820, patrolMaxX: 6140, spriteAtlas: atlas }),
+            new Zombie('spitter', { x: 6340, y: GROUND_Y - 104, patrolMinX: 6270, patrolMaxX: 6560, spriteAtlas: atlas }),
+            new Zombie('fast', { x: 6720, y: GROUND_Y - 100 - 152, patrolMinX: 6540, patrolMaxX: 6890, spriteAtlas: atlas }),
+            new Zombie('special', { x: 7040, y: GROUND_Y - 110, patrolMinX: 6900, patrolMaxX: 7125, spriteAtlas: atlas }),
+            new Zombie('fast', { x: 7520, y: GROUND_Y - 100, patrolMinX: 7400, patrolMaxX: 7860, spriteAtlas: atlas }),
+            new Zombie('spitter', { x: 7780, y: GROUND_Y - 104, patrolMinX: 7560, patrolMaxX: 7900, spriteAtlas: atlas }),
+
+            // Ala C: Subsuelo Biotech Labs Sector B-3
+            new Zombie('fast', { x: 8360, y: GROUND_Y - 100, patrolMinX: 8240, patrolMaxX: 8490, spriteAtlas: atlas }),
+            new Zombie('spitter', { x: 8640, y: GROUND_Y - 104 - 138, patrolMinX: 8460, patrolMaxX: 8810, spriteAtlas: atlas }),
+            new Zombie('special', { x: 8940, y: GROUND_Y - 110, patrolMinX: 8800, patrolMaxX: 9100, spriteAtlas: atlas }),
+            new Zombie('fast', { x: 9260, y: GROUND_Y - 100 - 142, patrolMinX: 9060, patrolMaxX: 9450, spriteAtlas: atlas }),
+            new Zombie('spitter', { x: 9540, y: GROUND_Y - 104, patrolMinX: 9420, patrolMaxX: 9740, spriteAtlas: atlas }),
+            new Zombie('special', { x: 9880, y: GROUND_Y - 110 - 138, patrolMinX: 9700, patrolMaxX: 10080, spriteAtlas: atlas }),
+            new Zombie('fast', { x: 10180, y: GROUND_Y - 100, patrolMinX: 10050, patrolMaxX: 10225, spriteAtlas: atlas }),
+            new Zombie('spitter', { x: 10440, y: GROUND_Y - 104, patrolMinX: 10330, patrolMaxX: 10680, spriteAtlas: atlas }),
+            new Zombie('fast', { x: 10620, y: GROUND_Y - 100, patrolMinX: 10460, patrolMaxX: 10720, spriteAtlas: atlas })
+        ];
+    }
+
+    _setPaused(state) {
+        if (this.levelCompleted) return;
+        this.paused = Boolean(state);
+        if (this.paused) {
+            this.inventoryOpen = false;
+            this.inventoryPanel?.classList.add('hidden');
+        }
+        this.pausePanel?.classList.toggle('hidden', !this.paused);
+    }
+
+    _setInventoryOpen(state) {
+        if (this.levelCompleted || this.paused) return;
+        this.inventoryOpen = Boolean(state);
+        if (this.inventoryOpen) {
+            this._renderInventorySlots();
+        }
+        this.inventoryPanel?.classList.toggle('hidden', !this.inventoryOpen);
+    }
+
+    _renderInventorySlots() {
+        if (!this.inventorySlotsContainer) return;
+        this.inventorySlotsContainer.innerHTML = '';
+        const owned = this.engine.inventory.getPurchasedWeapons();
+        const equippedId = this.engine.inventory.getEquippedWeapon().id;
+
+        owned.forEach((weapon, idx) => {
+            const card = document.createElement('button');
+            card.type = 'button';
+            card.className = `inv-slot-btn ${weapon.id === equippedId ? 'active' : ''}`;
+
+            const ammoInfo = weapon.type === 'melee'
+                ? 'Munición: ∞'
+                : `Munición: ${this.engine.inventory.getMagazineAmmo(weapon.id)} / ${this.engine.inventory.getReserveAmmo(weapon.id)}`;
+
+            card.innerHTML = `
+                <span class="inv-slot-hotkey">[${idx + 1}]</span>
+                <strong>${weapon.name}</strong>
+                <span class="inv-slot-meta">Daño: ${this.engine.inventory.getEffectiveDamage(weapon.id)} | ${ammoInfo}</span>
+            `;
+
+            card.addEventListener('click', () => {
+                this.engine.inventory.equipWeapon(weapon.id);
+                this.engine.audio.playClick();
+                this._renderInventorySlots();
+                this._syncHud();
+            });
+
+            this.inventorySlotsContainer.appendChild(card);
+        });
+
+        if (this.btnUseMedkitUI) {
+            const count = this.engine.inventory.getMedkits();
+            this.btnUseMedkitUI.textContent = `✚ USAR BOTIQUÍN (+55 SALUD) — DISPONIBLES: ${count}`;
+            this.btnUseMedkitUI.disabled = count <= 0 || this.player.health >= this.player.maxHealth;
+        }
+    }
+
+    update(dt) {
+        this.time += dt;
+        this.engine.renderer.updateAtmosphere(dt);
+
+        const globalModalOpen = document.querySelector('.modal-backdrop:not(.hidden)');
+        if (globalModalOpen) return;
+
+        if (this.engine.input.isActionJustPressed('pause')) {
+            if (this.inventoryOpen) {
+                this.engine.audio.playClick();
+                this._setInventoryOpen(false);
+                return;
+            }
+            if (!this.levelCompleted) {
+                this.engine.audio.playClick();
+                this._setPaused(!this.paused);
+                return;
+            }
+        }
+
+        if (!this.paused && !this.levelCompleted && this.engine.input.isActionJustPressed('inventory')) {
+            this.engine.audio.playClick();
+            this._setInventoryOpen(!this.inventoryOpen);
+            return;
+        }
+
+        if (this.paused || this.inventoryOpen || this.levelCompleted) {
+            return;
+        }
+
+        this.elapsedTime += dt;
+
+        const combatCallbacks = {
+            onSpawnProjectile: (cfg) => this.combat.spawnProjectile(cfg),
+            onPlayerMelee: (box, dmg, kb) => this.combat.handlePlayerMelee(box, dmg, kb, this.enemies, this.destructibles, this.player),
+            onEnemyMeleeHit: (enemy, plr, dmg) => this.combat.handleEnemyMeleeHit(enemy, plr, dmg),
+            onToxicExplosion: (zombie, plr) => this.combat.handleToxicExplosion(zombie, plr, this.enemies),
+            onBossSlam: (boss) => this.combat.handleBossSlam(boss),
+            onFloatingText: (x, y, text, color) => this.combat.spawnFloatingText(x, y, text, color),
+            onLandImpact: (x, y, strength) => {
+                this.combat.spawnHitParticles(x, y - 2, '#8fa6ba', Math.max(3, Math.round(strength * 6)));
+            }
+        };
+
+        const activeMinX = this.arenaLocked ? ARENA_LOCK_X : 0;
+        this.camera.setBounds(activeMinX, WORLD_WIDTH);
+
+        this.player.update(dt, this.engine.input, this.platforms, WORLD_WIDTH, combatCallbacks, this.ladders);
+        if (this.arenaLocked && this.player.x < activeMinX + 16) {
+            this.player.x = activeMinX + 16;
+            this.player.vx = 0;
+        }
+
+        if (this.player.dead) {
+            this.defeatTimer += dt;
+            this.camera.follow(this.player, dt);
+            if (this.defeatTimer >= 1.55) {
+                this.engine.sceneManager.transitionTo('gameOver', {
+                    retryScene: 'level02',
+                    levelName: 'PABELLÓN DE URGENCIAS',
+                    zombiesKilled: this.zombiesKilled,
+                    timeSeconds: this.elapsedTime
+                }, 0.5);
+            }
+            this._syncHud();
+            return;
+        }
+
+        this._checkHazardsAndAcidPits();
+        this._checkCheckpoints();
+        this._checkMissionInteractions();
+        this._checkSupplyPickups();
+
+        for (const enemy of this.enemies) {
+            enemy.update(dt, this.player, this.platforms, WORLD_WIDTH, combatCallbacks);
+        }
+        this.enemies = this.enemies.filter(e => !e.removable);
+
+        this.combat.update(dt, this.player, this.enemies, this.platforms, this.destructibles);
+
+        this.camera.follow(this.player, dt);
+        this._syncHud();
+    }
+
+    _checkHazardsAndAcidPits() {
+        for (const hz of this.hazards) {
+            const hitbox = { x: hz.x + 8, y: hz.y + 8, width: hz.width - 16, height: hz.height - 8 };
+            if (CollisionSystem.intersectsAABB(this.player, hitbox)) {
+                if (this.player.takeDamage(hz.damage, hz.x + hz.width * 0.5)) {
+                    this.camera.shake(7, 0.2);
+                    this.combat.spawnHitParticles(this.player.x + 20, this.player.y + 62, '#d91e2a', 8);
+                    this.combat.spawnFloatingText(this.player.x, this.player.y - 12, `-${hz.damage} PÚAS`, '#ff4d5a');
+                }
+            }
+        }
+
+        for (const pit of this.acidPits) {
+            const hitbox = { x: pit.x + 10, y: pit.y + 4, width: pit.width - 20, height: pit.height };
+            if (CollisionSystem.intersectsAABB(this.player, hitbox)) {
+                if (this.player.takeDamage(pit.damage, pit.x + pit.width * 0.5)) {
+                    this.camera.shake(9, 0.24);
+                    this.combat.spawnHitParticles(this.player.x + 20, this.player.y + 64, '#4eff78', 12);
+                    this.combat.spawnFloatingText(this.player.x - 8, this.player.y - 14, `-${pit.damage} ÁCIDO B-3`, '#6dff92');
+                }
+            }
+        }
+    }
+
+    _checkCheckpoints() {
+        for (const cp of this.checkpoints) {
+            if (cp.reached) continue;
+            if (CollisionSystem.intersectsAABB(this.player, cp)) {
+                cp.reached = true;
+                this.engine.audio.playPickup();
+                this.engine.economy.addScore(200);
+                this.player.health = Math.min(this.player.maxHealth, this.player.health + 35);
+                this.engine.inventory.addAmmo('pistol_9mm', 16);
+                this.combat.spawnFloatingText(
+                    cp.x - 24,
+                    cp.y - 18,
+                    `✓ ${cp.label}: +35 SALUD / +16 BALAS`,
+                    '#47ff8c'
+                );
+            }
+        }
+    }
+
+    _checkMissionInteractions() {
+        const interactPressed = this.engine.input.isActionJustPressed('interact');
+
+        const pickupZone = {
+            x: this.pickupStation.x - 26,
+            y: this.pickupStation.y - 20,
+            width: this.pickupStation.width + 52,
+            height: this.pickupStation.height + 24
+        };
+
+        const deliveryZone = {
+            x: this.deliveryStation.x - 28,
+            y: this.deliveryStation.y - 20,
+            width: this.deliveryStation.width + 56,
+            height: this.deliveryStation.height + 24
+        };
+
+        if (!this.player.hasPackage && CollisionSystem.intersectsAABB(this.player, pickupZone)) {
+            if (interactPressed) {
+                this.player.hasPackage = true;
+                this.engine.audio.playPickup();
+                this.engine.economy.addScore(200);
+                this.combat.spawnFloatingText(
+                    this.player.x - 10,
+                    this.player.y - 18,
+                    '🧪 SUERO ESTABILIZADOR RECIBIDO (+200 PTS)',
+                    '#5eff98'
+                );
+            }
+        }
+
+        if (!this.player.packageDelivered && CollisionSystem.intersectsAABB(this.player, deliveryZone)) {
+            if (interactPressed) {
+                if (!this.player.hasPackage) {
+                    this.engine.audio.playError();
+                    this.combat.spawnFloatingText(
+                        this.player.x - 40,
+                        this.player.y - 18,
+                        '⚠ RECOGE EL SUERO EN LA FARMACIA BLINDADA',
+                        '#ff5c66'
+                    );
+                    return;
+                }
+
+                this.player.packageDelivered = true;
+                this.engine.audio.playPickup();
+                this.engine.economy.addScore(500);
+                this.combat.spawnFloatingText(
+                    this.player.x - 35,
+                    this.player.y - 24,
+                    '✓ SUERO ENTREGADO — ¡ALERTA: PACIENTE CERO LIBERADO!',
+                    '#47ff8c'
+                );
+                this._triggerBossEncounter();
+            }
+        }
+    }
+
+    _triggerBossEncounter() {
+        if (this.bossSpawned) return;
+        this.bossSpawned = true;
+        this.arenaLocked = true;
+        this.camera.shake(15, 0.5);
+
+        this.boss = new Boss({
+            x: 11720,
+            y: GROUND_Y - 172,
+            arenaMinX: ARENA_LOCK_X + 20,
+            arenaMaxX: WORLD_WIDTH - 24,
+            audio: this.engine.audio,
+            spriteAtlas: this.engine.spriteAtlas,
+            variant: 2
+        });
+        this.enemies.push(this.boss);
+        this.bossBarWrap?.classList.remove('hidden');
+    }
+
+    _checkSupplyPickups() {
+        for (const item of this.pickups) {
+            if (item.taken) continue;
+            if (CollisionSystem.intersectsAABB(this.player, item)) {
+                item.taken = true;
+                this.engine.audio.playPickup();
+                if (item.type === 'medkit') {
+                    this.engine.inventory.addMedkits(1);
+                    this.combat.spawnFloatingText(item.x, item.y - 10, '+1 BOTIQUÍN [H]', '#47ff8c');
+                } else {
+                    const equipped = this.engine.inventory.getEquippedWeapon();
+                    const targetWeapon = equipped.type === 'ranged' ? equipped.id : 'pistol_9mm';
+                    const spec = this.engine.inventory.getWeaponSpec(targetWeapon);
+                    const amount = spec.magazineSize * 2;
+                    this.engine.inventory.addAmmo(targetWeapon, amount);
+                    this.combat.spawnFloatingText(item.x, item.y - 10, `+${amount} MUNICIÓN`, '#ffd166');
+                }
+            }
+        }
+    }
+
+    _handleBossDefeated() {
+        if (this.levelCompleted) return;
+        this.levelCompleted = true;
+        this.bossBarWrap?.classList.add('hidden');
+
+        const levelInfo = this.engine.levels.getLevelById(2);
+        this.moneyEarnedInRun = this.engine.economy.getMoney() - this.startMoneySnapshot;
+
+        this.engine.economy.addMoney(levelInfo.baseMoneyReward);
+        this.engine.economy.addScore(levelInfo.baseScoreReward);
+        this.scoreEarnedInRun = this.engine.economy.getScore() - this.startScoreSnapshot;
+
+        // Completar Nivel 02 también garantiza acceso a tienda y desbloquea Rifle AR-Contención
+        this.engine.saveSystem.completeLevel(1, ['shotgun_combat', 'smg_tactical']);
+        this.engine.saveSystem.completeLevel(2, ['rifle_bio']);
+        this.engine.audio.playVictory();
+
+        if (this.resScore) this.resScore.textContent = `${this.scoreEarnedInRun} PTS`;
+        if (this.resZombies) this.resZombies.textContent = String(this.zombiesKilled);
+        if (this.resCombatMoney) this.resCombatMoney.textContent = `$${this.moneyEarnedInRun}`;
+        if (this.resLevelReward) this.resLevelReward.textContent = `+$${levelInfo.baseMoneyReward}`;
+        if (this.resTime) this.resTime.textContent = this._formatTime(this.elapsedTime);
+
+        this._syncHud();
+        window.setTimeout(() => {
+            if (this.isSceneActive) {
+                this.victoryPanel?.classList.remove('hidden');
+            }
+        }, 650);
+    }
+
+    _formatTime(totalSeconds) {
+        const mins = Math.floor(totalSeconds / 60);
+        const secs = Math.floor(totalSeconds % 60);
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    _renderHudAvatar() {
+        if (!this.hudAvatarCanvas || typeof this.hudAvatarCanvas.getContext !== 'function') return;
+        const atlas = this.engine.spriteAtlas;
+        if (!atlas || !atlas.isReady()) return;
+
+        const exprKey = this.player ? this.player.getExpressionKey() : 'face_normal';
+        if (exprKey === this._lastAvatarKey) return;
+        this._lastAvatarKey = exprKey;
+
+        const actx = this.hudAvatarCanvas.getContext('2d');
+        if (!actx || typeof actx.clearRect !== 'function') return;
+        const cw = this.hudAvatarCanvas.width || 116;
+        const ch = this.hudAvatarCanvas.height || 116;
+        actx.clearRect(0, 0, cw, ch);
+        atlas.drawSprite(actx, exprKey, 2, 4, cw - 4, ch - 6);
+    }
+
+    _syncHud() {
+        const playerName = this.engine.saveSystem.getPlayerName() || 'Repartidor';
+        if (this.hudPlayerName) this.hudPlayerName.textContent = playerName;
+
+        if (this.player) {
+            const hpRatio = Math.max(0, this.player.health / this.player.maxHealth);
+            if (this.hudHealthFill) this.hudHealthFill.style.width = `${Math.round(hpRatio * 100)}%`;
+            if (this.hudHealthText) this.hudHealthText.textContent = `${this.player.health} / ${this.player.maxHealth}`;
+
+            this._renderHudAvatar();
+
+            if (!this.player.hasPackage) {
+                if (this.hudPackageState) this.hudPackageState.textContent = 'Suero pendiente';
+                if (this.hudObjectiveText) {
+                    this.hudObjectiveText.textContent = this.player.x > 460
+                        ? '⬅ Vuelve a la Farmacia Blindada y pulsa [E]'
+                        : 'Recoge el Suero en la Farmacia Blindada [E]';
+                }
+                if (this.hudProgressFill) this.hudProgressFill.style.width = '4%';
+            } else if (!this.player.packageDelivered) {
+                if (this.hudPackageState) this.hudPackageState.textContent = 'Suero B-3 (Refrigerado)';
+                const distLeft = Math.max(0, Math.round((this.deliveryStation.x - this.player.x) / 10));
+                if (this.hudObjectiveText) {
+                    this.hudObjectiveText.textContent = `Lleva el Suero a Aislamiento B-3 (${distLeft}m) [E]`;
+                }
+                const routeRatio = Math.max(0, Math.min(1, (this.player.x - this.pickupStation.x) / (this.deliveryStation.x - this.pickupStation.x)));
+                if (this.hudProgressFill) this.hudProgressFill.style.width = `${Math.round(routeRatio * 100)}%`;
+            } else if (!this.levelCompleted) {
+                if (this.hudPackageState) this.hudPackageState.textContent = '✓ Suero en Aislamiento';
+                if (this.hudObjectiveText) this.hudObjectiveText.textContent = '¡Elimina a PACIENTE CERO en el Reactor B-3!';
+                if (this.hudProgressFill) this.hudProgressFill.style.width = '100%';
+            } else {
+                if (this.hudObjectiveText) this.hudObjectiveText.textContent = '¡Pabellón y Sector B-3 asegurados!';
+            }
+        }
+
+        if (this.hudMoney) this.hudMoney.textContent = `$${this.engine.economy.getMoney()}`;
+        if (this.hudScore) this.hudScore.textContent = `${this.engine.economy.getScore()}`;
+
+        const weapon = this.engine.inventory.getEquippedWeapon();
+        if (this.hudWeaponName) this.hudWeaponName.textContent = weapon.shortName;
+        if (this.hudAmmoText) {
+            if (weapon.type === 'melee') {
+                this.hudAmmoText.textContent = 'CQC ∞';
+            } else if (this.engine.inventory.reloading) {
+                this.hudAmmoText.textContent = 'RECARGANDO...';
+            } else {
+                this.hudAmmoText.textContent = `${this.engine.inventory.getMagazineAmmo(weapon.id)} / ${this.engine.inventory.getReserveAmmo(weapon.id)}`;
+            }
+        }
+        if (this.hudMedkitCount) {
+            this.hudMedkitCount.textContent = String(this.engine.inventory.getMedkits());
+        }
+
+        if (this.boss && !this.boss.dead) {
+            const bRatio = Math.max(0, this.boss.health / this.boss.maxHealth);
+            if (this.bossNameText) this.bossNameText.textContent = this.boss.typeLabel;
+            if (this.bossHealthFill) this.bossHealthFill.style.width = `${Math.round(bRatio * 100)}%`;
+            if (this.bossHealthText) this.bossHealthText.textContent = `${this.boss.health} / ${this.boss.maxHealth}`;
+        }
+    }
+
+    // =========================================================================
+    // RENDERIZADO HD SURVIVAL HORROR: HOSPITAL GENERAL + BIOTECH LABS SECTOR B-3
+    // =========================================================================
+
+    render(renderer) {
+        const ctx = renderer.ctx;
+        const camX = this.camera.getRenderX();
+        const camY = this.camera.getRenderY();
+
+        // PLANO 1 & 2: Arquitectura interior de Hospital General / Quirófanos / Biotech Labs B-3
+        this._renderInteriorArchitecture(ctx, renderer, camX, camY);
+
+        // PLANO 3: Cápsulas mutagénicas gigantes, puertas de emergencia y mobiliario clínico
+        this._renderStasisPodsAndProps(ctx, renderer, camX, camY);
+
+        // PLANO 4: Escaleras, estaciones de misión, pasarelas industriales, fosas de ácido y suministros
+        this._renderLaddersAndHazards(ctx, renderer, camX, camY);
+        this._renderCheckpoints(ctx, renderer, camX, camY);
+        this._renderMissionStations(ctx, renderer, camX, camY);
+        this._renderPlatformsAndDestructibles(ctx, renderer, camX, camY);
+        this._renderAcidPits(ctx, renderer, camX, camY);
+        this._renderSupplyPickups(ctx, renderer, camX, camY);
+
+        if (this.arenaLocked) {
+            this._renderArenaBarrier(ctx, camX, camY);
+        }
+
+        // Entidades vivas y sistema de partículas/proyectiles
+        for (const enemy of this.enemies) {
+            if (enemy.x + enemy.width < camX - 140 || enemy.x > camX + renderer.width + 140) continue;
+            enemy.render(ctx, camX, camY, renderer);
+        }
+
+        this.player?.render(ctx, camX, camY);
+        this.combat?.render(ctx, camX, camY);
+
+        // Iluminación cenital fluorescente/emergencia + linterna táctica del domiciliario
+        this._renderCeilingLighting(ctx, renderer, camX, camY);
+        this.player?.renderFlashlight(renderer, camX, camY);
+
+        // Neblina bioquímica baja y viñeta claustrofóbica (sin barras verticales intrusivas)
+        const inBioLab = camX > 7600;
+        renderer.drawFog(inBioLab ? '75, 195, 115' : '110, 135, 155', inBioLab ? 0.58 : 0.42);
+        renderer.drawVignette(0.74);
+    }
+
+    _renderInteriorArchitecture(ctx, renderer, camX, camY) {
+        const inBlackout = camX >= 3700 && camX < 7900;
+        const inBioLab = camX >= 7900;
+
+        // Fondo mural profundo según el ala actual
+        const wallGrad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+        if (inBioLab) {
+            wallGrad.addColorStop(0, '#050c12');
+            wallGrad.addColorStop(0.5, '#0d1b24');
+            wallGrad.addColorStop(1, '#091418');
+        } else if (inBlackout) {
+            wallGrad.addColorStop(0, '#06070c');
+            wallGrad.addColorStop(0.55, '#131620');
+            wallGrad.addColorStop(1, '#0c0e15');
+        } else {
+            wallGrad.addColorStop(0, '#091017');
+            wallGrad.addColorStop(0.5, '#1a2733');
+            wallGrad.addColorStop(1, '#121b24');
+        }
+        ctx.fillStyle = wallGrad;
+        ctx.fillRect(0, 0, renderer.width, renderer.height);
+
+        // Techo estructural con tuberías industriales (parallax 0.65x)
+        ctx.fillStyle = '#070b11';
+        ctx.fillRect(0, 0, renderer.width, 72);
+        ctx.fillStyle = '#162230';
+        ctx.fillRect(0, 68, renderer.width, 14);
+
+        // Paneles murales modulares cada 360 px (con carteles HOSPITAL GENERAL y BIOTECH LABS B-3)
+        const panelW = 360;
+        const firstPanel = Math.floor(camX / panelW);
+        const lastPanel = Math.floor((camX + renderer.width) / panelW) + 1;
+
+        ctx.save();
+        for (let p = firstPanel; p <= lastPanel; p++) {
+            const worldX = p * panelW;
+            const sx = Math.round(worldX - camX);
+
+            // Columna divisoria de hormigón/acero
+            ctx.fillStyle = '#0d141d';
+            ctx.fillRect(sx, 80, 26, GROUND_Y - 80);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.strokeRect(sx + 26, 84, panelW - 26, GROUND_Y - 84);
+
+            // Zócalo clínico inferior con franja sanitaria
+            ctx.fillStyle = worldX >= 8200 ? '#112228' : '#18222d';
+            ctx.fillRect(sx + 26, GROUND_Y - 145, panelW - 26, 145);
+            ctx.fillStyle = worldX >= 8200 ? '#2fa866' : '#7b222c';
+            ctx.fillRect(sx + 26, GROUND_Y - 148, panelW - 26, 5);
+
+            // Rótulos icónicos inspirados en el arte conceptual del Hospital y Laboratorio B-3
+            if (p % 4 === 1 && worldX < 8000) {
+                ctx.fillStyle = '#b8c4d0';
+                ctx.strokeStyle = '#263240';
+                ctx.lineWidth = 3;
+                ctx.fillRect(sx + 70, 156, 220, 74);
+                ctx.strokeRect(sx + 70, 156, 220, 74);
+
+                // Cruz roja médica
+                ctx.fillStyle = '#b51924';
+                ctx.fillRect(sx + 96, 174, 12, 38);
+                ctx.fillRect(sx + 83, 187, 38, 12);
+
+                ctx.fillStyle = '#151d26';
+                ctx.font = 'bold 20px Impact, "Arial Black", sans-serif';
+                ctx.fillText('HOSPITAL', sx + 136, 190);
+                ctx.fillText('GENERAL', sx + 136, 214);
+            } else if (p % 3 === 0 && worldX >= 8200) {
+                ctx.fillStyle = '#1b2836';
+                ctx.strokeStyle = '#38e57d';
+                ctx.lineWidth = 2;
+                ctx.fillRect(sx + 68, 152, 226, 86);
+                ctx.strokeRect(sx + 68, 152, 226, 86);
+
+                ctx.fillStyle = '#86ffad';
+                ctx.font = 'bold 21px Impact, "Arial Black", sans-serif';
+                ctx.fillText('BIOTECH LABS', sx + 88, 188);
+                ctx.fillStyle = '#d4e4f4';
+                ctx.font = 'bold 15px Consolas, monospace';
+                ctx.fillText('SECTOR B-3', sx + 88, 218);
+            }
+
+            // Manchas de sangre / huellas en muros de urgencias
+            if (p % 2 === 1 && worldX < 8200) {
+                ctx.fillStyle = 'rgba(135, 14, 22, 0.62)';
+                ctx.beginPath();
+                ctx.arc(sx + 290, GROUND_Y - 190, 14, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillRect(sx + 286, GROUND_Y - 180, 6, 36);
+            }
+        }
+        ctx.restore();
+
+        // Suelo embaldosado clínico reflectante o rejilla metálica de laboratorio
+        const gy = Math.round(GROUND_Y - camY);
+        const floorGrad = ctx.createLinearGradient(0, gy, 0, renderer.height);
+        floorGrad.addColorStop(0, inBioLab ? '#16262b' : '#1b2532');
+        floorGrad.addColorStop(0.25, '#0c121a');
+        floorGrad.addColorStop(1, '#04060a');
+        ctx.fillStyle = floorGrad;
+        ctx.fillRect(0, gy, renderer.width, renderer.height - gy);
+
+        ctx.fillStyle = inBioLab ? '#365864' : '#3a4b60';
+        ctx.fillRect(0, gy, renderer.width, 5);
+    }
+
+    _renderStasisPodsAndProps(ctx, renderer, camX, camY) {
+        const atlas = this.engine.spriteAtlas;
+
+        // Cápsulas gigantes de contención biológica en el Sector B-3
+        for (const pod of this.stasisPods) {
+            const sx = Math.round(pod.x - camX);
+            const sy = Math.round(GROUND_Y - 330 - camY);
+            if (sx + 180 < 0 || sx - 40 > renderer.width) continue;
+
+            const glowCol = pod.broken ? 'rgba(72, 255, 118, 0.22)' : 'rgba(62, 255, 128, 0.36)';
+            renderer.drawRadialGlow(sx + 72, sy + 165, 16, 175, glowCol);
+
+            ctx.save();
+            ctx.fillStyle = pod.broken ? 'rgba(35, 95, 58, 0.22)' : 'rgba(48, 225, 108, 0.24)';
+            ctx.strokeStyle = pod.broken ? '#4f8f66' : '#6bff9c';
+            ctx.lineWidth = 3;
+            ctx.fillRect(sx, sy + 24, 144, 276);
+            ctx.strokeRect(sx, sy + 24, 144, 276);
+
+            // Tapas superior e inferior del cilindro
+            ctx.fillStyle = '#1c2a38';
+            ctx.fillRect(sx - 12, sy, 168, 26);
+            ctx.fillRect(sx - 12, sy + 298, 168, 32);
+
+            if (!pod.broken && pod.specimen && atlas?.isReady()) {
+                const floatY = Math.sin(this.time * 2.4 + pod.x) * 6;
+                atlas.drawFrame(ctx, pod.specimen, Math.floor(this.time * 4), sx + 72, sy + 282 + floatY, {
+                    targetHeight: 122,
+                    alpha: 0.75
+                });
+            }
+
+            if (pod.broken) {
+                ctx.strokeStyle = '#dcffe6';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(sx + 26, sy + 64);
+                ctx.lineTo(sx + 84, sy + 148);
+                ctx.lineTo(sx + 42, sy + 225);
+                ctx.lineTo(sx + 112, sy + 286);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // Puertas de EMERGENCIA, sillas de espera, camillas, sillas de ruedas y consolas de ADN
+        for (const prop of this.hospitalProps) {
+            const sx = Math.round(prop.x - camX);
+            const gy = Math.round(GROUND_Y - camY);
+            if (sx + 200 < 0 || sx - 60 > renderer.width) continue;
+
+            ctx.save();
+            if (prop.kind === 'emergency_doors') {
+                // Puerta doble hospitalaria a escala humana simétrica (174px alto frente a personajes de 120px)
+                ctx.fillStyle = '#273240';
+                ctx.strokeStyle = '#0e141c';
+                ctx.lineWidth = 3;
+                ctx.fillRect(sx, gy - 174, 142, 174);
+                ctx.strokeRect(sx, gy - 174, 142, 174);
+                ctx.beginPath();
+                ctx.moveTo(sx + 71, gy - 174);
+                ctx.lineTo(sx + 71, gy);
+                ctx.stroke();
+
+                ctx.fillStyle = '#0b1118';
+                ctx.fillRect(sx + 20, gy - 144, 30, 52);
+                ctx.fillRect(sx + 92, gy - 144, 30, 52);
+
+                // Letrero EMERGENCIA brillante
+                renderer.drawRadialGlow(sx + 71, gy - 196, 6, 82, 'rgba(255, 36, 48, 0.42)');
+                ctx.fillStyle = '#c81926';
+                ctx.fillRect(sx + 16, gy - 210, 110, 26);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 13px Consolas, monospace';
+                ctx.fillText('EMERGENCIA', sx + 28, gy - 192);
+            } else if (prop.kind === 'chairs') {
+                for (let c = 0; c < 3; c++) {
+                    const cx = sx + c * 42;
+                    ctx.fillStyle = '#24466b';
+                    ctx.fillRect(cx, gy - 54, 34, 28);
+                    ctx.fillRect(cx - 2, gy - 26, 38, 10);
+                    ctx.fillStyle = '#10161f';
+                    ctx.fillRect(cx + 4, gy - 16, 5, 16);
+                    ctx.fillRect(cx + 26, gy - 16, 5, 16);
+                }
+            } else if (prop.kind === 'wheelchair') {
+                ctx.strokeStyle = '#6d7f94';
+                ctx.lineWidth = 3;
+                ctx.fillStyle = '#2d161c';
+                ctx.fillRect(sx + 8, gy - 58, 34, 30);
+                ctx.beginPath();
+                ctx.arc(sx + 22, gy - 22, 20, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(sx + 50, gy - 10, 9, 0, Math.PI * 2);
+                ctx.stroke();
+            } else if (prop.kind === 'stretcher') {
+                ctx.fillStyle = '#cfd8e2';
+                ctx.fillRect(sx, gy - 52, 112, 14);
+                ctx.fillStyle = 'rgba(155, 18, 26, 0.8)';
+                ctx.fillRect(sx + 22, gy - 52, 48, 10);
+                ctx.strokeStyle = '#5c6d82';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(sx + 14, gy - 38);
+                ctx.lineTo(sx + 26, gy);
+                ctx.moveTo(sx + 98, gy - 38);
+                ctx.lineTo(sx + 86, gy);
+                ctx.stroke();
+            } else if (prop.kind === 'dna_console') {
+                ctx.fillStyle = '#182430';
+                ctx.strokeStyle = '#365068';
+                ctx.lineWidth = 2;
+                ctx.fillRect(sx, gy - 118, 116, 118);
+                ctx.strokeRect(sx, gy - 118, 116, 118);
+
+                ctx.fillStyle = '#072414';
+                ctx.strokeStyle = '#47ff8c';
+                ctx.fillRect(sx + 10, gy - 106, 96, 54);
+                ctx.strokeRect(sx + 10, gy - 106, 96, 54);
+
+                renderer.drawRadialGlow(sx + 58, gy - 78, 4, 65, 'rgba(65, 255, 125, 0.25)');
+                ctx.fillStyle = '#5eff98';
+                ctx.font = 'bold 10px Consolas, monospace';
+                ctx.fillText('DNA // B-3', sx + 22, gy - 76);
+            }
+            ctx.restore();
+        }
+    }
+
+    _renderLaddersAndHazards(ctx, renderer, camX, camY) {
+        const atlas = this.engine.spriteAtlas;
+
+        for (const lad of this.ladders) {
+            const lx = Math.round(lad.x - camX);
+            const ly = Math.round(lad.y - camY);
+            if (lx + lad.width < -30 || lx > renderer.width + 30) continue;
+
+            if (atlas?.isReady()) {
+                const segH = 74;
+                const count = Math.ceil(lad.height / segH);
+                for (let s = 0; s < count; s++) {
+                    const drawY = ly + s * segH;
+                    const h = Math.min(segH, (ly + lad.height) - drawY);
+                    atlas.drawSprite(ctx, 'prop_ladder', lx, drawY, lad.width, Math.max(24, h));
+                }
+            } else {
+                ctx.fillStyle = '#8b6a3e';
+                ctx.fillRect(lx, ly, lad.width, lad.height);
+            }
+        }
+
+        for (const hz of this.hazards) {
+            const hx = Math.round(hz.x - camX);
+            const hy = Math.round(hz.y - camY);
+            if (hx + hz.width < -30 || hx > renderer.width + 30) continue;
+
+            if (atlas?.isReady()) {
+                atlas.drawSprite(ctx, 'prop_spikes', hx, hy, hz.width, hz.height);
+            } else {
+                ctx.fillStyle = '#9aa5b4';
+                ctx.fillRect(hx, hy, hz.width, hz.height);
+            }
+        }
+    }
+
+    _renderAcidPits(ctx, renderer, camX, camY) {
+        for (const pit of this.acidPits) {
+            const px = Math.round(pit.x - camX);
+            const py = Math.round(pit.y - camY);
+            if (px + pit.width < -40 || px > renderer.width + 40) continue;
+
+            renderer.drawRadialGlow(px + pit.width * 0.5, py + 10, 10, pit.width * 0.65, 'rgba(68, 255, 110, 0.35)');
+
+            ctx.save();
+            // Borde industrial de contención
+            ctx.fillStyle = '#121922';
+            ctx.fillRect(px - 6, py + 6, pit.width + 12, 36);
+
+            // Fluido ácido radiactivo burbujeante
+            const acidGrad = ctx.createLinearGradient(0, py + 4, 0, py + 34);
+            acidGrad.addColorStop(0, '#7dff96');
+            acidGrad.addColorStop(0.45, '#27d85c');
+            acidGrad.addColorStop(1, '#0b5222');
+            ctx.fillStyle = acidGrad;
+            ctx.fillRect(px, py + 6, pit.width, 28);
+
+            // Burbujas animadas
+            ctx.fillStyle = '#eaffef';
+            for (let b = 0; b < 5; b++) {
+                const bx = px + 24 + b * ((pit.width - 48) / 4);
+                const by = py + 10 + Math.sin(this.time * 6 + b * 1.7) * 4;
+                ctx.beginPath();
+                ctx.arc(bx, by, 3.2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    _renderCheckpoints(ctx, renderer, camX, camY) {
+        for (const cp of this.checkpoints) {
+            const cx = Math.round(cp.x - camX);
+            const cy = Math.round(cp.y - camY);
+            if (cx < -120 || cx > renderer.width + 120) continue;
+
+            const col = cp.reached ? '#38e57d' : '#4cc9f0';
+            renderer.drawRadialGlow(
+                cx + 41,
+                cy + 26,
+                4,
+                72,
+                cp.reached ? 'rgba(56, 229, 125, 0.36)' : 'rgba(76, 201, 240, 0.28)'
+            );
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(10, 20, 28, 0.94)';
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 2;
+            ctx.fillRect(cx, cy, cp.width, cp.height);
+            ctx.strokeRect(cx, cy, cp.width, cp.height);
+            ctx.fillStyle = col;
+            ctx.font = 'bold 10px Consolas, monospace';
+            ctx.fillText(cp.reached ? '✓ SELLADO' : 'CONTROL', cx + 10, cy + 22);
+            ctx.fillStyle = '#e2eef8';
+            ctx.fillText(cp.label, cx + 8, cy + 42);
+            ctx.restore();
+        }
+    }
+
+    _renderMissionStations(ctx, renderer, camX, camY) {
+        const atlas = this.engine.spriteAtlas;
+
+        // 1. Farmacia Blindada (Recepción del Suero B-3)
+        const px = Math.round(this.pickupStation.x - camX);
+        const py = Math.round(this.pickupStation.y - camY);
+        if (px + 160 > 0 && px < renderer.width) {
+            ctx.fillStyle = 'rgba(12, 26, 34, 0.94)';
+            ctx.strokeStyle = '#4cc9f0';
+            ctx.lineWidth = 2.5;
+            ctx.fillRect(px, py, this.pickupStation.width, this.pickupStation.height);
+            ctx.strokeRect(px, py, this.pickupStation.width, this.pickupStation.height);
+
+            ctx.fillStyle = '#4cc9f0';
+            ctx.font = 'bold 11px Consolas, monospace';
+            ctx.fillText('FARMACIA B-3', px + 14, py + 20);
+
+            if (!this.player?.hasPackage) {
+                const bob = Math.sin(this.time * 4.5) * 4;
+                renderer.drawRadialGlow(px + 59, py + 62, 8, 68, 'rgba(76, 201, 240, 0.42)');
+                if (atlas?.isReady()) {
+                    atlas.drawSprite(ctx, 'icon_package', px + 35, py + 44 + bob, 48, 41);
+                }
+                ctx.fillStyle = '#90e0ef';
+                ctx.fillText('[E] RECOGER SUERO', px - 4, py - 12 + bob);
+            } else {
+                ctx.fillStyle = '#9fb2c8';
+                ctx.fillText('✓ DESPACHADO', px + 16, py + 64);
+            }
+        }
+
+        // 2. Unidad de Aislamiento Sector B-3 (Entrega final)
+        const dx = Math.round(this.deliveryStation.x - camX);
+        const dy = Math.round(this.deliveryStation.y - camY);
+        if (dx + 180 > 0 && dx < renderer.width) {
+            ctx.fillStyle = 'rgba(10, 30, 22, 0.94)';
+            ctx.strokeStyle = '#38e57d';
+            ctx.lineWidth = 2.5;
+            ctx.fillRect(dx, dy, this.deliveryStation.width, this.deliveryStation.height);
+            ctx.strokeRect(dx, dy, this.deliveryStation.width, this.deliveryStation.height);
+
+            renderer.drawRadialGlow(dx + 68, dy + 44, 10, 98, 'rgba(56, 229, 125, 0.36)');
+            ctx.fillStyle = '#38e57d';
+            ctx.font = 'bold 11px Consolas, monospace';
+            ctx.fillText('AISLAMIENTO B-3', dx + 14, dy + 24);
+
+            if (atlas?.isReady()) {
+                atlas.drawSprite(ctx, 'icon_backpack', dx + 46, dy + 46, 44, 46, { alpha: 0.92 });
+            }
+
+            if (!this.player?.packageDelivered) {
+                const bob = Math.sin(this.time * 4.5) * 4;
+                ctx.fillStyle = '#5cff9d';
+                ctx.fillText('[E] ENTREGAR SUERO', dx - 4, dy - 12 + bob);
+            } else {
+                ctx.fillStyle = '#5cff9d';
+                ctx.fillText('✓ SUERO ENTREGADO', dx, dy - 12);
+            }
+        }
+    }
+
+    _renderPlatformsAndDestructibles(ctx, renderer, camX, camY) {
+        const atlas = this.engine.spriteAtlas;
+
+        for (const plat of this.platforms) {
+            if (plat.kind === 'ground') continue;
+            const sx = Math.round(plat.x - camX);
+            const sy = Math.round(plat.y - camY);
+            if (sx + plat.width < -30 || sx > renderer.width + 30) continue;
+
+            if (plat.kind === 'barrier_concrete' && atlas?.isReady()) {
+                atlas.drawSprite(ctx, 'prop_barrier_concrete', sx, sy - 6, plat.width, plat.height + 6);
+            } else if (plat.kind === 'metal_crate' && atlas?.isReady()) {
+                atlas.drawSprite(ctx, 'prop_crate_metal', sx, sy, plat.width, plat.height);
+            } else if (plat.kind === 'lab_catwalk') {
+                // Pasarela industrial de acero con barandilla amarilla de seguridad tipo Biotech Labs
+                ctx.fillStyle = 'rgba(6, 10, 16, 0.68)';
+                ctx.fillRect(sx + 12, sy + plat.height, 10, GROUND_Y - plat.y - plat.height);
+                ctx.fillRect(sx + plat.width - 22, sy + plat.height, 10, GROUND_Y - plat.y - plat.height);
+
+                ctx.strokeStyle = '#d49a2a';
+                ctx.lineWidth = 2.2;
+                ctx.strokeRect(sx + 6, sy - 26, plat.width - 12, 26);
+
+                ctx.fillStyle = '#223040';
+                ctx.strokeStyle = '#7b90a8';
+                ctx.lineWidth = 2;
+                ctx.fillRect(sx, sy, plat.width, plat.height);
+                ctx.strokeRect(sx, sy, plat.width, plat.height);
+
+                ctx.fillStyle = '#f5a623';
+                for (let stripeX = sx + 6; stripeX < sx + plat.width - 14; stripeX += 22) {
+                    ctx.fillRect(stripeX, sy + 4, 11, 4);
+                }
+            }
+        }
+
+        for (const prop of this.destructibles) {
+            if (prop.destroyed) continue;
+            const sx = Math.round(prop.x - camX);
+            const sy = Math.round(prop.y - camY);
+            if (sx + prop.width < -30 || sx > renderer.width + 30) continue;
+
+            if (prop.kind === 'barrel_red') {
+                renderer.drawRadialGlow(sx + prop.width * 0.5, sy + prop.height * 0.5, 4, 42, 'rgba(255, 72, 36, 0.26)');
+                if (atlas?.isReady()) {
+                    atlas.drawSprite(ctx, 'prop_barrel_red', sx, sy, prop.width, prop.height);
+                } else {
+                    ctx.fillStyle = '#c8232c';
+                    ctx.fillRect(sx, sy, prop.width, prop.height);
+                }
+            } else {
+                if (atlas?.isReady()) {
+                    atlas.drawSprite(ctx, 'prop_crate_wood', sx, sy, prop.width, prop.height);
+                } else {
+                    ctx.fillStyle = '#7c5329';
+                    ctx.fillRect(sx, sy, prop.width, prop.height);
+                }
+            }
+        }
+    }
+
+    _renderSupplyPickups(ctx, renderer, camX, camY) {
+        const atlas = this.engine.spriteAtlas;
+
+        for (const item of this.pickups) {
+            if (item.taken) continue;
+            const sx = Math.round(item.x - camX);
+            const sy = Math.round(item.y - camY + Math.sin(this.time * 4 + item.x) * 3.5);
+            if (sx < -40 || sx > renderer.width + 40) continue;
+
+            if (item.type === 'medkit') {
+                renderer.drawRadialGlow(sx + 16, sy + 16, 4, 38, 'rgba(56, 229, 125, 0.36)');
+                if (atlas?.isReady()) {
+                    atlas.drawSprite(ctx, 'icon_medkit', sx, sy, item.width, item.height);
+                } else {
+                    ctx.fillStyle = '#eef4f8';
+                    ctx.fillRect(sx, sy, item.width, item.height);
+                }
+            } else {
+                renderer.drawRadialGlow(sx + 16, sy + 16, 4, 38, 'rgba(245, 166, 35, 0.36)');
+                ctx.fillStyle = '#283627';
+                ctx.strokeStyle = '#f5a623';
+                ctx.lineWidth = 2;
+                ctx.fillRect(sx, sy + 3, item.width, item.height - 6);
+                ctx.strokeRect(sx, sy + 3, item.width, item.height - 6);
+                ctx.fillStyle = '#ffd166';
+                ctx.font = 'bold 10px Consolas, monospace';
+                ctx.fillText('AMMO', sx + 4, sy + 20);
+            }
+        }
+    }
+
+    _renderCeilingLighting(ctx, renderer, camX, camY) {
+        for (let i = 0; i < this.ceilingLights.length; i++) {
+            const light = this.ceilingLights[i];
+            const lx = Math.round(light.x - camX);
+            if (lx < -220 || lx > renderer.width + 220) continue;
+            const ly = Math.round(74 - camY * 0.2);
+
+            const flicker = Math.sin(this.time * 18 + i * 2.7) > 0.91 ? 0.38 : 1.0;
+
+            ctx.fillStyle = '#1b2634';
+            ctx.fillRect(lx - 42, ly, 84, 8);
+
+            let tubeCol = `rgba(190, 235, 255, ${(0.85 * flicker).toFixed(2)})`;
+            let coneCol = `rgba(165, 220, 255, ${(0.18 * flicker).toFixed(2)})`;
+
+            if (light.mode === 'blackout_red') {
+                tubeCol = `rgba(255, 48, 62, ${(0.88 * flicker).toFixed(2)})`;
+                coneCol = `rgba(255, 38, 54, ${(0.22 * flicker).toFixed(2)})`;
+            } else if (light.mode === 'biolab_green') {
+                tubeCol = `rgba(110, 255, 155, ${(0.85 * flicker).toFixed(2)})`;
+                coneCol = `rgba(72, 255, 128, ${(0.19 * flicker).toFixed(2)})`;
+            }
+
+            ctx.fillStyle = tubeCol;
+            ctx.fillRect(lx - 34, ly + 6, 68, 4);
+            renderer.drawLightCone(lx, ly + 10, Math.PI * 0.5, 0.62, 320, coneCol, 'rgba(0,0,0,0)');
+        }
+    }
+
+    _renderArenaBarrier(ctx, camX, camY) {
+        const bx = Math.round(ARENA_LOCK_X - camX);
+        if (bx < -30 || bx > 1300) return;
+        ctx.save();
+        ctx.fillStyle = 'rgba(56, 229, 125, 0.30)';
+        ctx.fillRect(bx, 0, 16, GROUND_Y - camY);
+        ctx.strokeStyle = '#47ff8c';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(bx, 0, 16, GROUND_Y - camY);
+        ctx.restore();
+    }
+}
