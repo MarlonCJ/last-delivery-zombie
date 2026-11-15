@@ -1007,6 +1007,45 @@ export class AudioManager {
         osc2.stop(now + 1.35);
     }
 
+    /**
+     * Cuerno grave de alarma para el evento de horda y la alerta previa al Jefe.
+     */
+    playHordeHorn() {
+        if (!this._canPlaySfx()) return;
+
+        const now = this.ctx.currentTime;
+        const gain = this.ctx.createGain();
+        const filter = this.ctx.createBiquadFilter();
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(980, now);
+        filter.frequency.exponentialRampToValueAtTime(240, now + 1.55);
+
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(0.52, now + 0.12);
+        gain.gain.setValueAtTime(0.52, now + 0.72);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+
+        const osc1 = this.ctx.createOscillator();
+        const osc2 = this.ctx.createOscillator();
+        osc1.type = 'sawtooth';
+        osc2.type = 'square';
+        osc1.frequency.setValueAtTime(92, now);
+        osc1.frequency.exponentialRampToValueAtTime(52, now + 1.65);
+        osc2.frequency.setValueAtTime(138, now);
+        osc2.frequency.exponentialRampToValueAtTime(78, now + 1.65);
+
+        osc1.connect(filter);
+        osc2.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.sfxBus);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 1.85);
+        osc2.stop(now + 1.85);
+    }
+
     _canPlaySfx() {
         this.unlock();
         return Boolean(

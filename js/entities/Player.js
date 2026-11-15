@@ -1,11 +1,10 @@
 /**
  * Player.js
  * Entidad controlable del protagonista (Domiciliario).
- * Implementa física 2D con peso real, escalada de escaleras (player_climb_back),
- * agacharse/cubrirse (player_crouch), rodar/esquivar (player_roll), empujar cajas móviles
- * (player_push), rebote contra obstáculos (player_recoil), aturdimiento por golpe fuerte
- * (player_stun), sprites de disparo por arma específica, reaparición en Checkpoints
- * y mochila táctica limitada estrictamente a 3 armas preasignadas.
+ * Utiliza exclusivamente la hoja de sprites HD compartida para el repartidor
+ * con escala anatómica simétrica en todas sus animaciones (idle, caminar, correr,
+ * saltar, caer, agacharse, rodar, escalar, empujar cajas, ataque cuerpo a cuerpo,
+ * disparo, rebote, aturdimiento, daño y muerte).
  */
 
 import { Physics2D } from '../core/Physics2D.js';
@@ -17,7 +16,7 @@ export class Player {
         this.y = y;
         this.width = 44;
         this.height = 108;
-        this.visualHeight = 120;
+        this.visualHeight = 114;
 
         this.vx = 0;
         this.vy = 0;
@@ -712,186 +711,116 @@ export class Player {
         }
         ctx.restore();
 
-        if (this.spriteAtlas && this.spriteAtlas.isReady()) {
-            const hasExt = Boolean(this.spriteAtlas.getExtImage());
-            const equipped = this.inventory.getEquippedWeapon();
+        if (this.spriteAtlas && this.spriteAtlas.getDeliveryImage()) {
+            let animKey = 'player_idle';
+            let frameIdx = 0;
+            let loop = true;
 
-            // Si está atacando con un arma con sprite dedicado (Escopeta, SMG, Rifle, Revólver, Machete, Lanzallamas)
-            if (this.animState === 'attack' && hasExt && equipped.playerHoldSprite && this.spriteAtlas.getSpriteMeta(equipped.playerHoldSprite)) {
-                const sMeta = this.spriteAtlas.getSpriteMeta(equipped.playerHoldSprite);
-                const scale = (this.visualHeight * 0.96) / Math.max(1, sMeta.h);
-                const dw = sMeta.w * scale;
-                const dh = sMeta.h * scale;
-                const kickX = this.muzzleFlashTimer > 0 ? (-this.facing * 4) : 0;
-                this.spriteAtlas.drawSprite(
-                    ctx,
-                    equipped.playerHoldSprite,
-                    cx - dw * 0.44 + kickX,
-                    bottomY - dh + 2,
-                    dw,
-                    dh,
-                    { flipX: this.facing < 0, hitFlash: this.hurtAnimTimer > 0.16 }
-                );
-            } else {
-                let animKey = 'player_idle';
-                let frameIdx = 0;
-                let loop = true;
-                let targetH = this.visualHeight;
-
-                switch (this.animState) {
-                    case 'idle':
-                        animKey = 'player_idle';
-                        frameIdx = Math.floor(this.animTime * 4.4);
-                        break;
-                    case 'walk':
-                        animKey = 'player_walk';
-                        frameIdx = Math.floor(this.stridePhase);
-                        break;
-                    case 'run':
-                        animKey = 'player_run';
-                        frameIdx = Math.floor(this.stridePhase);
-                        break;
-                    case 'climb':
-                        if (hasExt) {
-                            animKey = 'player_climb_back';
-                            frameIdx = Math.floor(this.stridePhase);
-                            targetH = this.visualHeight * 1.04;
-                        } else {
-                            animKey = 'player_walk';
-                            frameIdx = Math.floor(this.stridePhase);
-                        }
-                        break;
-                    case 'crouch':
-                        if (hasExt) {
-                            animKey = 'player_crouch';
-                            frameIdx = Math.abs(this.vx) > 10 ? (1 + (Math.floor(this.animTime * 6) % 2)) : 2;
-                            loop = false;
-                            targetH = this.visualHeight * 0.88;
-                        } else {
-                            animKey = 'player_idle';
-                            targetH = this.visualHeight * 0.78;
-                        }
-                        break;
-                    case 'roll': {
-                        if (hasExt) {
-                            animKey = 'player_roll';
-                            const rProg = 1 - Math.max(0, this.rollTimer / 0.36);
-                            frameIdx = Math.min(3, Math.floor(rProg * 4));
-                            loop = false;
-                            targetH = this.visualHeight * 0.88;
-                        } else {
-                            animKey = 'player_jump';
-                            frameIdx = 2;
-                            loop = false;
-                        }
-                        break;
-                    }
-                    case 'push':
-                        if (hasExt) {
-                            animKey = 'player_push';
-                            frameIdx = Math.floor(this.stridePhase);
-                            targetH = this.visualHeight * 0.96;
-                        } else {
-                            animKey = 'player_walk';
-                            frameIdx = Math.floor(this.stridePhase);
-                        }
-                        break;
-                    case 'recoil': {
-                        if (hasExt) {
-                            animKey = 'player_recoil';
-                            const cProg = 1 - Math.max(0, this.recoilTimer / 0.22);
-                            frameIdx = Math.min(3, Math.floor(cProg * 4));
-                            loop = false;
-                        } else {
-                            animKey = 'player_hurt';
-                            frameIdx = 0;
-                            loop = false;
-                        }
-                        break;
-                    }
-                    case 'stun': {
-                        if (hasExt) {
-                            animKey = 'player_stun';
-                            const sProg = 1 - Math.max(0, this.stunTimer / 0.34);
-                            frameIdx = Math.min(2, Math.floor(sProg * 3));
-                            loop = false;
-                        } else {
-                            animKey = 'player_hurt';
-                            frameIdx = 2;
-                            loop = false;
-                        }
-                        break;
-                    }
-                    case 'jump':
-                        animKey = 'player_jump';
-                        frameIdx = this.vy < -320 ? 1 : 2;
-                        loop = false;
-                        break;
-                    case 'fall':
-                        animKey = 'player_jump';
-                        frameIdx = this.vy > 300 ? 4 : 3;
-                        loop = false;
-                        break;
-                    case 'attack': {
-                        const prog = 1 - Math.max(0, this.attackAnimTimer / Math.max(0.01, this.attackAnimDuration));
-                        if (this.lastAttackType === 'melee') {
-                            animKey = 'player_melee';
-                            frameIdx = Math.min(5, Math.floor(prog * 6));
-                        } else {
-                            animKey = 'player_shoot';
-                            frameIdx = Math.min(4, Math.floor(prog * 5));
-                        }
-                        loop = false;
-                        break;
-                    }
-                    case 'hurt': {
-                        animKey = 'player_hurt';
-                        const hProg = 1 - Math.max(0, this.hurtAnimTimer / 0.30);
-                        frameIdx = Math.min(3, Math.floor(hProg * 4));
-                        loop = false;
-                        break;
-                    }
-                    case 'dead':
-                        animKey = 'player_dead';
-                        frameIdx = Math.min(3, Math.floor(this.deathCollapse * 4));
-                        loop = false;
-                        break;
-                    default:
-                        break;
+            switch (this.animState) {
+                case 'idle':
+                    animKey = 'player_idle';
+                    frameIdx = Math.floor(this.animTime * 4.5);
+                    break;
+                case 'walk':
+                    animKey = 'player_walk';
+                    frameIdx = Math.floor(this.stridePhase);
+                    break;
+                case 'run':
+                    animKey = 'player_run';
+                    frameIdx = Math.floor(this.stridePhase);
+                    break;
+                case 'climb':
+                    animKey = 'player_climb';
+                    frameIdx = Math.floor(this.stridePhase);
+                    break;
+                case 'crouch':
+                    animKey = 'player_crouch';
+                    frameIdx = Math.abs(this.vx) > 10 ? (Math.floor(this.animTime * 5.5) % 2) : 0;
+                    loop = false;
+                    break;
+                case 'roll': {
+                    animKey = 'player_roll';
+                    const count = Math.max(1, this.spriteAtlas.getFrameCount(animKey));
+                    const rProg = 1 - Math.max(0, this.rollTimer / 0.36);
+                    frameIdx = Math.min(count - 1, Math.floor(rProg * count));
+                    loop = false;
+                    break;
                 }
-
-                const squashAmt = this.landSquash;
-                const squashX = 1 + squashAmt * 0.09;
-                const squashY = 1 - squashAmt * 0.11;
-                const stepBounceY = (this.onGround && (this.animState === 'walk' || this.animState === 'run'))
-                    ? -Math.abs(Math.sin(this.stridePhase * Math.PI * 0.5)) * 1.8
-                    : 0;
-
-                this.spriteAtlas.drawFrame(ctx, animKey, frameIdx, cx, bottomY + 1, {
-                    targetHeight: targetH,
-                    squashX,
-                    squashY,
-                    offsetY: stepBounceY,
-                    flipX: this.facing < 0,
-                    loop,
-                    hitFlash: this.hurtAnimTimer > 0.16
-                });
+                case 'push':
+                    animKey = 'player_push';
+                    frameIdx = Math.floor(this.stridePhase);
+                    break;
+                case 'recoil': {
+                    animKey = 'player_recoil';
+                    const count = Math.max(1, this.spriteAtlas.getFrameCount(animKey));
+                    const cProg = 1 - Math.max(0, this.recoilTimer / 0.22);
+                    frameIdx = Math.min(count - 1, Math.floor(cProg * count));
+                    loop = false;
+                    break;
+                }
+                case 'stun': {
+                    animKey = 'player_stun';
+                    const count = Math.max(1, this.spriteAtlas.getFrameCount(animKey));
+                    const sProg = 1 - Math.max(0, this.stunTimer / 0.34);
+                    frameIdx = Math.min(count - 1, Math.floor(sProg * count));
+                    loop = false;
+                    break;
+                }
+                case 'jump': {
+                    animKey = 'player_jump';
+                    const count = Math.max(1, this.spriteAtlas.getFrameCount(animKey));
+                    frameIdx = this.vy < -480 ? 1 : (this.vy < -180 ? 2 : Math.min(count - 1, 3));
+                    loop = false;
+                    break;
+                }
+                case 'fall': {
+                    animKey = 'player_fall';
+                    const count = Math.max(1, this.spriteAtlas.getFrameCount(animKey));
+                    frameIdx = this.vy > 240 ? Math.min(count - 1, 1) : 0;
+                    loop = false;
+                    break;
+                }
+                case 'attack': {
+                    const prog = 1 - Math.max(0, this.attackAnimTimer / Math.max(0.01, this.attackAnimDuration));
+                    animKey = this.lastAttackType === 'melee' ? 'player_melee' : 'player_shoot';
+                    const count = Math.max(1, this.spriteAtlas.getFrameCount(animKey));
+                    frameIdx = Math.min(count - 1, Math.floor(prog * count));
+                    loop = false;
+                    break;
+                }
+                case 'hurt': {
+                    animKey = 'player_hurt';
+                    const count = Math.max(1, this.spriteAtlas.getFrameCount(animKey));
+                    const hProg = 1 - Math.max(0, this.hurtAnimTimer / 0.30);
+                    frameIdx = Math.min(count - 1, Math.floor(hProg * count));
+                    loop = false;
+                    break;
+                }
+                case 'dead': {
+                    animKey = 'player_dead';
+                    const count = Math.max(1, this.spriteAtlas.getFrameCount(animKey));
+                    frameIdx = Math.min(count - 1, Math.floor(this.deathCollapse * count));
+                    loop = false;
+                    break;
+                }
+                default:
+                    break;
             }
 
-            if (this.hasPackage && !this.packageDelivered && !this.dead && this.animState !== 'climb' && this.animState !== 'roll') {
-                const packOffsetX = this.facing > 0 ? -32 : 8;
-                const crouchShift = this.crouching ? 22 : 0;
-                this.spriteAtlas.drawSprite(
-                    ctx,
-                    'pickup_package',
-                    cx + packOffsetX,
-                    bottomY - 78 + crouchShift + Math.sin(this.animTime * 5) * 1.2,
-                    26,
-                    23
-                );
-            }
-        } else {
-            this._renderProceduralFallback(ctx, cx, bottomY);
+            const stepBounceY = (this.onGround && (this.animState === 'walk' || this.animState === 'run'))
+                ? -Math.abs(Math.sin(this.stridePhase * Math.PI * 0.5)) * 1.4
+                : 0;
+            const kickX = (this.animState === 'attack' && this.muzzleFlashTimer > 0) ? (-this.facing * 2) : 0;
+
+            // Todas las animaciones reciben exactamente la misma altura objetivo (this.visualHeight)
+            // para mantener simetría estricta de tamaño sin deformaciones al cambiar de estado.
+            this.spriteAtlas.drawFrame(ctx, animKey, frameIdx, cx + kickX, bottomY + 1, {
+                targetHeight: this.visualHeight,
+                offsetY: stepBounceY,
+                flipX: this.facing < 0,
+                loop,
+                hitFlash: this.hurtAnimTimer > 0.16
+            });
         }
 
         if (this.inventory.reloading && !this.dead) {
@@ -903,23 +832,5 @@ export class Player {
             ctx.fillRect(cx - 22, bottomY - this.height - 17, Math.round(44 * prog), 4);
             ctx.restore();
         }
-    }
-
-    _renderProceduralFallback(ctx, cx, bottomY) {
-        ctx.save();
-        ctx.translate(cx, bottomY);
-        ctx.scale(this.facing, 1);
-        ctx.fillStyle = '#1e2c40';
-        ctx.fillRect(-10, -28, 9, 28);
-        ctx.fillRect(2, -28, 9, 28);
-        ctx.fillStyle = '#df9b1b';
-        ctx.fillRect(-18, -58, 10, 26);
-        ctx.fillStyle = '#c82330';
-        ctx.fillRect(-10, -60, 20, 32);
-        ctx.fillStyle = '#dc9e76';
-        ctx.beginPath();
-        ctx.arc(1, -68, 9, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
     }
 }

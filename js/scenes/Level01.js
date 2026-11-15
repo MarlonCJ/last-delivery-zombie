@@ -14,6 +14,7 @@ import { Player } from '../entities/Player.js';
 import { Zombie } from '../entities/Zombie.js';
 import { Boss } from '../entities/Boss.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
+import { HordeSystem } from '../systems/HordeSystem.js';
 import { LIFE_SCORE_INTERVAL } from '../systems/SaveSystem.js';
 
 const WORLD_WIDTH = 10400;
@@ -41,6 +42,8 @@ export class Level01 {
         this.streetLamps = [];
         this.pickups = [];
         this.combat = null;
+        this.horde = null;
+        this.hordeStarted = false;
 
         // Puntos clave de la misión de reparto con sprites reales (parada urbana + palé/consola)
         this.pickupStation = { x: 205, y: GROUND_Y - 124, width: 168, height: 124 };
@@ -202,8 +205,12 @@ export class Level01 {
         this.bossSpawned = false;
         this.arenaLocked = false;
         this.boss = null;
+        this.hordeStarted = false;
         this.lastCheckpointX = 80;
         this._lastAvatarKey = '';
+
+        this.horde?.stop();
+        this.horde = null;
 
         window.addEventListener('ldz:extra-life', this._onExtraLife);
 
@@ -233,6 +240,7 @@ export class Level01 {
             onEnemyKilled: (enemy) => {
                 if (!enemy.isBoss) {
                     this.zombiesKilled += 1;
+                    this.horde?.onZombieKilled(enemy);
                 } else {
                     this._handleBossDefeated();
                 }
@@ -251,6 +259,31 @@ export class Level01 {
             }
         });
 
+        // Evento de horda previo al Jefe Final: 10 zombis en Nivel 01, 5 activos a la vez.
+        this.horde = new HordeSystem({
+            levelId: 1,
+            arenaMinX: ARENA_LOCK_X + 20,
+            arenaMaxX: WORLD_WIDTH - 24,
+            groundY: GROUND_Y,
+            spriteAtlas: this.engine.spriteAtlas,
+            audio: this.engine.audio,
+            onSpawn: (zombie) => {
+                this.enemies.push(zombie);
+                this.combat?.spawnHitParticles(
+                    zombie.x + zombie.width * 0.5,
+                    zombie.y + zombie.height * 0.55,
+                    '#6d1018',
+                    7
+                );
+            },
+            onWarning: () => {
+                this.camera.shake(16, 0.65);
+            },
+            onComplete: () => {
+                this._triggerBossEncounter();
+            }
+        });
+
         this.camera.x = 0;
         this.hudOverlay?.classList.remove('hidden');
         this.bossBarWrap?.classList.add('hidden');
@@ -264,6 +297,8 @@ export class Level01 {
 
     exit() {
         this.isSceneActive = false;
+        this.horde?.stop();
+        this.horde = null;
         window.removeEventListener('ldz:extra-life', this._onExtraLife);
         this.hudOverlay?.classList.add('hidden');
         this.inventoryPanel?.classList.add('hidden');
@@ -664,6 +699,9 @@ export class Level01 {
         // 6. Actualizar Sistema de Combate + VFX en sprites
         this.combat.update(dt, this.player, this.enemies, this.platforms, this.destructibles, this.movableCrates);
 
+        // 6.1. Evento de horda: repone zombis y avanza hacia la alerta del Jefe Final
+        this.horde?.update(dt, this.player);
+
         // 7. Actualizar Cámara y HUD
         this.camera.follow(this.player, dt);
         this._syncHud();
@@ -755,12 +793,21 @@ export class Level01 {
                 this.combat.spawnFloatingText(
                     this.player.x - 20,
                     this.player.y - 24,
-                    '✓ ENTREGA REGISTRADA (+$60) — ¡MUTANTE B-3 DETECTADO!',
+                    '✓ ENTREGA REGISTRADA (+$60) — ¡HORDA DE INFECTADOS DETECTADA!',
                     '#47ff8c'
                 );
-                this._triggerBossEncounter();
+                this._startHorde();
             }
         }
+    }
+
+    _startHorde() {
+        if (this.hordeStarted) return;
+        this.hordeStarted = true;
+        this.arenaLocked = true;
+        this.camera.setBounds(ARENA_LOCK_X, WORLD_WIDTH);
+        this.camera.shake(10, 0.4);
+        this.horde?.start();
     }
 
     _triggerBossEncounter() {
@@ -902,9 +949,29 @@ export class Level01 {
                 const routeRatio = Math.max(0, Math.min(1, (this.player.x - this.pickupStation.x) / (this.deliveryStation.x - this.pickupStation.x)));
                 if (this.hudProgressFill) this.hudProgressFill.style.width = `${Math.round(routeRatio * 100)}%`;
             } else if (!this.levelCompleted) {
-                if (this.hudPackageState) this.hudPackageState.textContent = '✓ Entregado en Refugio';
-                if (this.hudObjectiveText) this.hudObjectiveText.textContent = '¡Derrota al Jefe: Mutante de Laboratorio B-3!';
-                if (this.hudProgressFill) this.hudProgressFill.style.width = '100%';
+                const horde = this.horde?.getSnapshot();
+                const hordeRunning = horde && ['intro', 'active', 'warning'].includes(horde.state);
+
+                if (hordeRunning) {
+                    if (this.hudPackageState) this.hudPackageState.textContent = '✓ Entregado — Horda en curso';
+                    if (this.hudObjectiveText) {
+                        if (horde.state === 'warning') {
+                            this.hudObjectiveText.textContent = '⚠ WARNING: JEFE FINAL APROXIMÁNDOSE';
+                        } else if (horde.state === 'intro') {
+                            this.hudObjectiveText.textContent = '¡Prepárate para la horda!';
+                        } else {
+                            this.hudObjectiveText.textContent = `Sobrevive a la horda (${horde.killed} / ${horde.total})`;
+                        }
+                    }
+                    if (this.hudProgressFill) {
+                        const ratio = horde.total > 0 ? Math.min(1, horde.killed / horde.total) : 0;
+                        this.hudProgressFill.style.width = `${Math.round(ratio * 100)}%`;
+                    }
+                } else {
+                    if (this.hudPackageState) this.hudPackageState.textContent = '✓ Entregado en Refugio';
+                    if (this.hudObjectiveText) this.hudObjectiveText.textContent = '¡Derrota al Jefe: Mutante de Laboratorio B-3!';
+                    if (this.hudProgressFill) this.hudProgressFill.style.width = '100%';
+                }
             } else {
                 if (this.hudObjectiveText) this.hudObjectiveText.textContent = '¡Misión completada con éxito!';
             }

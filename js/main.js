@@ -345,8 +345,10 @@ async function bootstrap() {
     // 2. Precarga inicial de recursos gráficos en alta definición (portada ilustrada HD, atlas HD 4x, atlas extendido HD 2x y fondo urbano HD)
     await assetLoader.preload([
         { key: 'menu_cover', type: 'image', src: 'assets/backgrounds/menu_cover_hd.jpg' },
-        { key: 'game_atlas', type: 'image', src: 'assets/sprites/game_atlas_hd.png' },
-        { key: 'game_atlas_ext', type: 'image', src: 'assets/sprites/game_atlas_ext_hd.png' },
+        { key: 'game_atlas', type: 'image', src: 'assets/sprites/game_atlas_hd.png?v=2' },
+        { key: 'game_atlas_ext', type: 'image', src: 'assets/sprites/game_atlas_ext_hd.png?v=2' },
+        { key: 'zombie_walker', type: 'image', src: 'assets/sprites/zombie_walker_hd.png' },
+        { key: 'delivery_sprite', type: 'image', src: 'assets/sprites/delivery_sprite_hd.png?v=2' },
         { key: 'city_bg', type: 'image', src: 'assets/backgrounds/city_street_hd.png' }
     ]);
     const spriteAtlas = new SpriteAtlas(assetLoader);

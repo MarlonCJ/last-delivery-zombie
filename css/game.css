@@ -696,3 +696,190 @@
     font-family: var(--font-mono);
     color: #ffffff;
 }
+
+/* ==========================================================================
+   EVENTO DE HORDA Y ALERTA PREVIA AL JEFE FINAL
+   ========================================================================== */
+
+.horde-banner {
+    position: absolute;
+    top: 92px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 580px;
+    padding: 12px 24px 11px;
+    text-align: center;
+    background: linear-gradient(180deg, rgba(42, 7, 12, 0.96) 0%, rgba(10, 7, 10, 0.94) 100%);
+    border: 2px solid #a31824;
+    border-radius: 6px;
+    box-shadow:
+        0 0 34px rgba(220, 30, 43, 0.42),
+        inset 0 0 22px rgba(0, 0, 0, 0.82);
+    z-index: 32;
+    pointer-events: none;
+    animation: hordeBannerIn 0.28s ease-out;
+}
+
+@keyframes hordeBannerIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-12px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+}
+
+.horde-kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2.2px;
+    color: #ff8d96;
+    margin-bottom: 2px;
+}
+
+.horde-title {
+    font-family: var(--font-display);
+    font-size: 31px;
+    line-height: 1.1;
+    letter-spacing: 1.5px;
+    color: #ffffff;
+    text-shadow:
+        0 2px 6px #000000,
+        0 0 20px rgba(255, 46, 59, 0.85);
+}
+
+.horde-sub {
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #ffd166;
+}
+
+.horde-progress-track {
+    width: 100%;
+    height: 8px;
+    margin-top: 9px;
+    background: #26090d;
+    border: 1px solid #6b1b23;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.horde-progress-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #8e0f1b 0%, #ff4755 100%);
+    box-shadow: 0 0 12px rgba(255, 71, 85, 0.75);
+    transition: width 0.2s ease-out;
+}
+
+.horde-counter {
+    margin-top: 5px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: #d8e4f2;
+}
+
+.horde-warning {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    z-index: 35;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 50% 50%, rgba(120, 4, 12, 0.18) 0%, rgba(75, 2, 8, 0.72) 100%);
+    animation: hordeWarningPulse 0.48s infinite alternate;
+}
+
+.horde-warning::before,
+.horde-warning::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 48px;
+    background: repeating-linear-gradient(
+        -45deg,
+        #180306 0 18px,
+        #a60f1b 18px 36px
+    );
+    opacity: 0.86;
+    box-shadow: 0 0 28px rgba(255, 30, 45, 0.55);
+}
+
+.horde-warning::before {
+    top: 0;
+}
+
+.horde-warning::after {
+    bottom: 0;
+}
+
+.horde-warning-title {
+    font-family: var(--font-display);
+    font-size: 82px;
+    line-height: 1;
+    letter-spacing: 5px;
+    color: #ff2e3b;
+    text-shadow:
+        0 0 14px rgba(255, 46, 59, 0.95),
+        0 0 42px rgba(200, 10, 25, 0.8),
+        0 6px 10px #000000;
+}
+
+.horde-warning-text {
+    font-family: var(--font-display);
+    font-size: 34px;
+    letter-spacing: 3px;
+    color: #ffffff;
+    text-shadow: 0 2px 8px #000000;
+}
+
+.horde-warning-sub {
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+    color: #ffd166;
+    text-shadow: 0 2px 6px #000000;
+}
+
+@keyframes hordeWarningPulse {
+    from {
+        opacity: 0.86;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.horde-red-flash {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 50% 50%, rgba(255, 30, 43, 0) 24%, rgba(220, 12, 28, 0.34) 72%, rgba(140, 0, 10, 0.62) 100%);
+    animation: hordeRedFlash 0.42s infinite;
+}
+
+@keyframes hordeRedFlash {
+    0%,
+    100% {
+        opacity: 0.18;
+    }
+    50% {
+        opacity: 0.92;
+    }
+}

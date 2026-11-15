@@ -483,32 +483,33 @@ export class Introduction {
         );
 
         if (atlas?.isReady()) {
-            // Protagonista corriendo/disparando con escala humana consistente (122 px)
+            // Protagonista corriendo/disparando con escala simétrica exclusiva del nuevo sprite HD (114 px)
             const shootingMoment = this.actTime > 1.5 && this.actTime < 2.9;
             if (shootingMoment) {
-                const f = Math.floor((this.actTime - 1.5) * 9) % 5;
-                atlas.drawFrame(ctx, 'player_shoot', f, heroX, groundY, { targetHeight: 122 });
-                if (f === 2) {
+                const shootCount = Math.max(1, atlas.getFrameCount('player_shoot'));
+                const f = Math.floor((this.actTime - 1.5) * 9) % shootCount;
+                atlas.drawFrame(ctx, 'player_shoot', f, heroX, groundY, { targetHeight: 114 });
+                if (f === 4 || f === 5) {
                     renderer.drawRadialGlow(heroX + 64, groundY - 76, 4, 98, 'rgba(255, 220, 95, 0.45)');
                 }
             } else {
-                atlas.drawFrame(ctx, 'player_run', Math.floor(this.time * 12), heroX, groundY, { targetHeight: 122 });
+                atlas.drawFrame(ctx, 'player_run', Math.floor(this.time * 12), heroX, groundY, { targetHeight: 114 });
             }
 
             // Infectados acechando al borde del haz de luz derecho con proporción humana simétrica
             atlas.drawFrame(ctx, 'znormal_attack', Math.floor(this.time * 6.5), 930 - this.actTime * 18, groundY, {
-                targetHeight: 118,
+                targetHeight: 114,
                 flipX: true
             });
             atlas.drawFrame(ctx, 'zfast_run', Math.floor(this.time * 11), 1065 - this.actTime * 28, groundY + 4, {
-                targetHeight: 116,
+                targetHeight: 112,
                 flipX: true
             });
 
-            // Retrato en primer plano cinematográfico del Protagonista a la izquierda
-            renderer.drawRadialGlow(195, 275, 20, 175, 'rgba(224, 38, 52, 0.25)');
-            atlas.drawSprite(ctx, 'portrait_hero_bust', 88, 152, 228, 200, { alpha: 0.96 });
-            atlas.drawSprite(ctx, 'icon_package', 274, 302, 58, 50);
+            // Retrato en primer plano cinematográfico del Protagonista (busto proporcional del nuevo sprite HD)
+            renderer.drawRadialGlow(195, 265, 20, 175, 'rgba(224, 38, 52, 0.25)');
+            atlas.drawSprite(ctx, 'portrait_hero_bust', 115, 162, 160, 192, { alpha: 0.98 });
+            atlas.drawSprite(ctx, 'icon_package', 248, 304, 54, 46);
         }
 
         renderer.drawRain(true);

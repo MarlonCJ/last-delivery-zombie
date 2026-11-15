@@ -16,6 +16,7 @@ import { Player } from '../entities/Player.js';
 import { Zombie } from '../entities/Zombie.js';
 import { Boss } from '../entities/Boss.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
+import { HordeSystem } from '../systems/HordeSystem.js';
 import { LIFE_SCORE_INTERVAL } from '../systems/SaveSystem.js';
 
 const WORLD_WIDTH = 12000;
@@ -44,6 +45,8 @@ export class Level02 {
         this.hospitalProps = [];
         this.pickups = [];
         this.combat = null;
+        this.horde = null;
+        this.hordeStarted = false;
 
         // Puntos clave de entrega del Nivel 02 renderizados con sprites HD
         this.pickupStation = { x: 225, y: GROUND_Y - 126, width: 168, height: 126 };
@@ -208,8 +211,12 @@ export class Level02 {
         this.bossSpawned = false;
         this.arenaLocked = false;
         this.boss = null;
+        this.hordeStarted = false;
         this.lastCheckpointX = 80;
         this._lastAvatarKey = '';
+
+        this.horde?.stop();
+        this.horde = null;
 
         window.addEventListener('ldz:extra-life', this._onExtraLife);
 
@@ -239,6 +246,7 @@ export class Level02 {
             onEnemyKilled: (enemy) => {
                 if (!enemy.isBoss) {
                     this.zombiesKilled += 1;
+                    this.horde?.onZombieKilled(enemy);
                 } else {
                     this._handleBossDefeated();
                 }
@@ -257,6 +265,32 @@ export class Level02 {
             }
         });
 
+        // Evento de horda previo al Jefe Final: 15 zombis en Nivel 02, 5 activos a la vez.
+        // El nivel 2 introduce variantes más agresivas (spitter, bomber, armored, leaper).
+        this.horde = new HordeSystem({
+            levelId: 2,
+            arenaMinX: ARENA_LOCK_X + 20,
+            arenaMaxX: WORLD_WIDTH - 24,
+            groundY: GROUND_Y,
+            spriteAtlas: this.engine.spriteAtlas,
+            audio: this.engine.audio,
+            onSpawn: (zombie) => {
+                this.enemies.push(zombie);
+                this.combat?.spawnHitParticles(
+                    zombie.x + zombie.width * 0.5,
+                    zombie.y + zombie.height * 0.55,
+                    '#6d1018',
+                    7
+                );
+            },
+            onWarning: () => {
+                this.camera.shake(16, 0.65);
+            },
+            onComplete: () => {
+                this._triggerBossEncounter();
+            }
+        });
+
         this.camera.x = 0;
         this.hudOverlay?.classList.remove('hidden');
         this.bossBarWrap?.classList.add('hidden');
@@ -270,6 +304,8 @@ export class Level02 {
 
     exit() {
         this.isSceneActive = false;
+        this.horde?.stop();
+        this.horde = null;
         window.removeEventListener('ldz:extra-life', this._onExtraLife);
         this.hudOverlay?.classList.add('hidden');
         this.inventoryPanel?.classList.add('hidden');
@@ -675,6 +711,9 @@ export class Level02 {
 
         this.combat.update(dt, this.player, this.enemies, this.platforms, this.destructibles, this.movableCrates);
 
+        // Evento de horda: repone zombis y avanza hacia la alerta del Jefe Final
+        this.horde?.update(dt, this.player);
+
         this.camera.follow(this.player, dt);
         this._syncHud();
     }
@@ -776,12 +815,21 @@ export class Level02 {
                 this.combat.spawnFloatingText(
                     this.player.x - 35,
                     this.player.y - 24,
-                    '✓ SUERO ENTREGADO (+$80) — ¡ALERTA: PACIENTE CERO LIBERADO!',
+                    '✓ SUERO ENTREGADO (+$80) — ¡HORDA DE INFECTADOS DETECTADA!',
                     '#47ff8c'
                 );
-                this._triggerBossEncounter();
+                this._startHorde();
             }
         }
+    }
+
+    _startHorde() {
+        if (this.hordeStarted) return;
+        this.hordeStarted = true;
+        this.arenaLocked = true;
+        this.camera.setBounds(ARENA_LOCK_X, WORLD_WIDTH);
+        this.camera.shake(10, 0.4);
+        this.horde?.start();
     }
 
     _triggerBossEncounter() {
@@ -919,9 +967,29 @@ export class Level02 {
                 const routeRatio = Math.max(0, Math.min(1, (this.player.x - this.pickupStation.x) / (this.deliveryStation.x - this.pickupStation.x)));
                 if (this.hudProgressFill) this.hudProgressFill.style.width = `${Math.round(routeRatio * 100)}%`;
             } else if (!this.levelCompleted) {
-                if (this.hudPackageState) this.hudPackageState.textContent = '✓ Suero en Aislamiento';
-                if (this.hudObjectiveText) this.hudObjectiveText.textContent = '¡Elimina a PACIENTE CERO en el Reactor B-3!';
-                if (this.hudProgressFill) this.hudProgressFill.style.width = '100%';
+                const horde = this.horde?.getSnapshot();
+                const hordeRunning = horde && ['intro', 'active', 'warning'].includes(horde.state);
+
+                if (hordeRunning) {
+                    if (this.hudPackageState) this.hudPackageState.textContent = '✓ Entregado — Horda en curso';
+                    if (this.hudObjectiveText) {
+                        if (horde.state === 'warning') {
+                            this.hudObjectiveText.textContent = '⚠ WARNING: PACIENTE CERO APROXIMÁNDOSE';
+                        } else if (horde.state === 'intro') {
+                            this.hudObjectiveText.textContent = '¡Prepárate para la horda!';
+                        } else {
+                            this.hudObjectiveText.textContent = `Sobrevive a la horda (${horde.killed} / ${horde.total})`;
+                        }
+                    }
+                    if (this.hudProgressFill) {
+                        const ratio = horde.total > 0 ? Math.min(1, horde.killed / horde.total) : 0;
+                        this.hudProgressFill.style.width = `${Math.round(ratio * 100)}%`;
+                    }
+                } else {
+                    if (this.hudPackageState) this.hudPackageState.textContent = '✓ Suero en Aislamiento';
+                    if (this.hudObjectiveText) this.hudObjectiveText.textContent = '¡Elimina a PACIENTE CERO en el Reactor B-3!';
+                    if (this.hudProgressFill) this.hudProgressFill.style.width = '100%';
+                }
             } else {
                 if (this.hudObjectiveText) this.hudObjectiveText.textContent = '¡Pabellón y Sector B-3 asegurados!';
             }

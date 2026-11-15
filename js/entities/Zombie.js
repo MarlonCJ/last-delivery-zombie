@@ -41,7 +41,7 @@ export class Zombie extends Enemy {
                 code: '01',
                 width: 44,
                 height: 104,
-                visualHeight: 114,
+                visualHeight: 120,
                 maxHealth: 60,
                 speed: 60,
                 chaseSpeed: 102,
@@ -59,7 +59,7 @@ export class Zombie extends Enemy {
                 code: '02',
                 width: 44,
                 height: 100,
-                visualHeight: 114,
+                visualHeight: 120,
                 maxHealth: 78,
                 speed: 112,
                 chaseSpeed: 204,
@@ -95,7 +95,7 @@ export class Zombie extends Enemy {
                 code: '04',
                 width: 46,
                 height: 104,
-                visualHeight: 118,
+                visualHeight: 120,
                 maxHealth: 115,
                 speed: 68,
                 chaseSpeed: 112,
@@ -131,7 +131,7 @@ export class Zombie extends Enemy {
                 code: '06',
                 width: 50,
                 height: 110,
-                visualHeight: 122,
+                visualHeight: 120,
                 maxHealth: 205,
                 speed: 54,
                 chaseSpeed: 98,
@@ -149,7 +149,7 @@ export class Zombie extends Enemy {
                 code: '07',
                 width: 46,
                 height: 104,
-                visualHeight: 116,
+                visualHeight: 120,
                 maxHealth: 185,
                 speed: 96,
                 chaseSpeed: 182,
@@ -167,7 +167,7 @@ export class Zombie extends Enemy {
                 code: '08',
                 width: 58,
                 height: 120,
-                visualHeight: 136,
+                visualHeight: 120,
                 maxHealth: 320,
                 speed: 50,
                 chaseSpeed: 94,
@@ -361,7 +361,8 @@ export class Zombie extends Enemy {
         }
 
         if (this.spriteAtlas && this.spriteAtlas.isReady()) {
-            const hasExt = this.spriteAtlas.getFrameCount(`${this.animPrefix}_walk`) > 0 && Boolean(this.spriteAtlas.getExtImage());
+            const hasExt = this.spriteAtlas.getFrameCount(`${this.animPrefix}_walk`) > 0 &&
+                Boolean(this.spriteAtlas.getExtImage() || this.spriteAtlas.getWalkerImage());
             let animKey = 'znormal_walk';
             let frameIdx = 0;
             let loop = true;
@@ -392,8 +393,17 @@ export class Zombie extends Enemy {
                     frameIdx = Math.min(count - 1, Math.floor(p * count));
                     loop = false;
                 } else {
-                    animKey = `${this.animPrefix}_walk`;
-                    frameIdx = Math.abs(this.vx) > 4 ? Math.floor(this.stridePhase) : 0;
+                    const idleKey = `${this.animPrefix}_idle`;
+                    if (Math.abs(this.vx) > 4) {
+                        animKey = `${this.animPrefix}_walk`;
+                        frameIdx = Math.floor(this.stridePhase);
+                    } else if (this.spriteAtlas.getFrameCount(idleKey) > 0) {
+                        animKey = idleKey;
+                        frameIdx = Math.floor(this.animTime * 5);
+                    } else {
+                        animKey = `${this.animPrefix}_walk`;
+                        frameIdx = 0;
+                    }
                 }
             } else {
                 // Fallback al primer atlas si el extendido aún no ha cargado
