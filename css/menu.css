@@ -5,19 +5,16 @@
 #main-menu-overlay {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    padding-top: 12px;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0 0 0 30px;
 }
 
-/* --- Logotipo Cinematográfico LAST DELIVERY ZOMBIE --- */
+/* --- Logotipo Cinematográfico LAST DELIVERY ZOMBIE ---
+   La portada ilustrada ya incluye el título, así que el logotipo SVG se oculta
+   para no duplicar el texto ni tapar la ilustración. */
 .brand-header {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-bottom: 6px;
-    filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.92));
-    animation: titleFloat 4.5s ease-in-out infinite;
+    display: none;
 }
 
 @keyframes titleFloat {
@@ -35,13 +32,24 @@
     overflow: visible;
 }
 
-/* --- Panel Central de Portada (Nombre + Botonera) --- */
+/* --- Panel de Portada (Nombre + Botonera) ---
+   Se coloca a la izquierda de la ilustración para dejar visible al protagonista,
+   el título y la horda de zombis de la derecha. */
 .menu-center-stack {
-    width: 396px;
+    width: 340px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
     z-index: 20;
+    padding: 11px;
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(8, 12, 20, 0.86) 0%, rgba(6, 9, 15, 0.82) 100%);
+    border: 1px solid rgba(112, 141, 178, 0.28);
+    border-left: 3px solid rgba(224, 30, 43, 0.88);
+    box-shadow:
+        0 18px 46px rgba(0, 0, 0, 0.66),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(3px);
 }
 
 /* Tarjeta metálica de identificación del protagonista */

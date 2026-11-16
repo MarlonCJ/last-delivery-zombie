@@ -292,58 +292,64 @@ export class MainMenu {
         ctx.fillRect(0, 0, w, h);
 
         if (hasCoverImg) {
-            // Portada ilustrada 2D Survival Horror de alta definición con movimiento de cámara sutil
+            // Portada ilustrada 2D Survival Horror en alta definición, encuadrada tipo "cover"
+            // y con una deriva de cámara muy sutil (margen extra para que nunca se vean los bordes).
             const driftX = Math.sin(this.time * 0.42) * 8;
             const driftY = Math.cos(this.time * 0.31) * 4;
+            const srcW = coverImg.naturalWidth || coverImg.width || w;
+            const srcH = coverImg.naturalHeight || coverImg.height || h;
+            const scale = Math.max((w + 28) / srcW, (h + 16) / srcH);
+            const drawW = srcW * scale;
+            const drawH = srcH * scale;
+            const drawX = (w - drawW) * 0.5 + driftX;
+            const drawY = (h - drawH) * 0.5 + driftY;
+
             ctx.save();
             ctx.imageSmoothingEnabled = true;
             if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(coverImg, -14 + driftX, -8 + driftY, w + 28, h + 16);
+            ctx.drawImage(coverImg, drawX, drawY, drawW, drawH);
             ctx.restore();
 
-            // Destello eléctrico de tormenta sobre el horizonte
+            // Destello lejano de tormenta (sin rayo dibujado, para no tapar el título de la portada)
             if (this.lightningFlash > 0) {
-                ctx.fillStyle = `rgba(195, 224, 255, ${(this.lightningFlash * 0.22).toFixed(3)})`;
-                ctx.fillRect(0, 0, w, h * 0.62);
-                this._drawLightningBolt(ctx);
+                ctx.fillStyle = `rgba(190, 220, 255, ${(this.lightningFlash * 0.10).toFixed(3)})`;
+                ctx.fillRect(0, 0, w, h * 0.55);
             }
 
-            // Haz móvil del reflector de cuarentena en el cielo
-            renderer.drawLightCone(
-                658 + driftX,
-                92 + driftY,
-                Math.PI * 0.34 + Math.sin(this.time * 0.68) * 0.11,
-                0.20,
-                430,
-                'rgba(255, 238, 190, 0.16)',
-                'rgba(255, 238, 190, 0)'
+            // Luces de la patrulla (azul/rojo), resplandor lunar y faro de la moto
+            const policeBlue = 0.09 + 0.09 * Math.abs(Math.sin(this.time * 3.1));
+            const policeRed = 0.08 + 0.08 * Math.abs(Math.sin(this.time * 2.4 + 1.6));
+            renderer.drawRadialGlow(
+                118 + driftX, 250 + driftY, 12, 108,
+                `rgba(58, 128, 255, ${policeBlue.toFixed(3)})`
+            );
+            renderer.drawRadialGlow(
+                168 + driftX, 250 + driftY, 12, 108,
+                `rgba(255, 46, 58, ${policeRed.toFixed(3)})`
+            );
+            renderer.drawRadialGlow(
+                206 + driftX, 128 + driftY, 18, 118,
+                'rgba(170, 210, 255, 0.11)'
+            );
+            renderer.drawRadialGlow(
+                128 + driftX, 606 + driftY, 26, 168,
+                'rgba(255, 186, 92, 0.10)'
             );
 
-            // Parpadeo cálido sobre el repartidor izquierdo y pulso carmesí en el complejo Biogen derecho
-            const lampFlicker = Math.sin(this.time * 16.5) > 0.93 ? 0.68 : 1.0;
-            renderer.drawRadialGlow(
-                205 + driftX,
-                165 + driftY,
-                16,
-                260,
-                `rgba(255, 192, 92, ${(0.18 * lampFlicker).toFixed(3)})`
-            );
-            const alarmPulse = 0.16 + 0.10 * Math.abs(Math.sin(this.time * 2.6));
-            renderer.drawRadialGlow(
-                1065 + driftX,
-                305 + driftY,
-                18,
-                210,
-                `rgba(235, 36, 48, ${alarmPulse.toFixed(3)})`
-            );
-
-            // Contraste central suave detrás del título y botones para máxima legibilidad
-            const centerShade = ctx.createRadialGradient(640, 395, 40, 640, 395, 430);
-            centerShade.addColorStop(0, 'rgba(4, 7, 13, 0.50)');
-            centerShade.addColorStop(0.68, 'rgba(4, 7, 13, 0.22)');
-            centerShade.addColorStop(1, 'rgba(4, 7, 13, 0)');
-            ctx.fillStyle = centerShade;
+            // Oscurecido lateral izquierdo: da contraste al panel del menú sin tapar al protagonista
+            const menuShade = ctx.createLinearGradient(0, 0, 470, 0);
+            menuShade.addColorStop(0, 'rgba(3, 6, 12, 0.60)');
+            menuShade.addColorStop(0.62, 'rgba(3, 6, 12, 0.28)');
+            menuShade.addColorStop(1, 'rgba(3, 6, 12, 0)');
+            ctx.fillStyle = menuShade;
             ctx.fillRect(0, 0, w, h);
+
+            // Base oscura para que el pie de versión sea legible
+            const bottomShade = ctx.createLinearGradient(0, h - 92, 0, h);
+            bottomShade.addColorStop(0, 'rgba(2, 4, 8, 0)');
+            bottomShade.addColorStop(1, 'rgba(2, 4, 8, 0.62)');
+            ctx.fillStyle = bottomShade;
+            ctx.fillRect(0, h - 92, w, 92);
         } else if (hasCityImg && atlas?.isReady()) {
             if (this.lightningFlash > 0) {
                 ctx.fillStyle = `rgba(195, 220, 255, ${(this.lightningFlash * 0.24).toFixed(3)})`;
