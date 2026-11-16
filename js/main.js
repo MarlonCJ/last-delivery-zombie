@@ -348,6 +348,7 @@ async function bootstrap() {
         { key: 'game_atlas', type: 'image', src: 'assets/sprites/game_atlas_hd.png?v=2' },
         { key: 'game_atlas_ext', type: 'image', src: 'assets/sprites/game_atlas_ext_hd.png?v=2' },
         { key: 'zombie_walker', type: 'image', src: 'assets/sprites/zombie_walker_hd.png' },
+        { key: 'zombie_walker_female', type: 'image', src: 'assets/sprites/zombie_walker_female_hd.png' },
         { key: 'delivery_sprite', type: 'image', src: 'assets/sprites/delivery_sprite_hd.png?v=2' },
         { key: 'city_bg', type: 'image', src: 'assets/backgrounds/city_street_hd.png' }
     ]);

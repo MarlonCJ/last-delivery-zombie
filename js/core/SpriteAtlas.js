@@ -8,6 +8,7 @@
 
 import { EXT_ATLAS_META } from './SpriteAtlasExtMeta.js';
 import { ZOMBIE_WALKER_META } from './ZombieWalkerMeta.js';
+import { FEMALE_ZOMBIE_META } from './FemaleZombieMeta.js';
 import { DELIVERY_META } from './DeliveryMeta.js';
 
 export const ATLAS_META = {
@@ -133,6 +134,7 @@ export class SpriteAtlas {
         this.meta = ATLAS_META;
         this.extMeta = EXT_ATLAS_META;
         this.walkerMeta = ZOMBIE_WALKER_META;
+        this.femaleMeta = FEMALE_ZOMBIE_META;
         this.deliveryMeta = DELIVERY_META;
     }
 
@@ -163,6 +165,15 @@ export class SpriteAtlas {
         return img;
     }
 
+    getFemaleImage() {
+        if (!this.assets || !this.femaleMeta?.imageKey) return null;
+        const img = this.assets.getImage(this.femaleMeta.imageKey);
+        if (!img) return null;
+        if (typeof img.complete === 'boolean' && !img.complete) return null;
+        if (typeof img.naturalWidth === 'number' && img.naturalWidth === 0) return null;
+        return img;
+    }
+
     getDeliveryImage() {
         if (!this.assets || !this.deliveryMeta?.imageKey) return null;
         const img = this.assets.getImage(this.deliveryMeta.imageKey);
@@ -174,12 +185,17 @@ export class SpriteAtlas {
 
     /**
      * Resuelve una animación en orden de prioridad: hoja del repartidor,
-     * hoja del caminante, atlas base y atlas extendido.
+     * hoja de la caminante femenina, hoja del caminante, atlas base y atlas extendido.
      */
     _resolveAnimation(animKey) {
         const deliveryFrames = this.deliveryMeta?.animations?.[animKey];
         if (deliveryFrames && deliveryFrames.length > 0 && this.getDeliveryImage()) {
             return { frames: deliveryFrames, source: 'delivery' };
+        }
+
+        const femaleFrames = this.femaleMeta?.animations?.[animKey];
+        if (femaleFrames && femaleFrames.length > 0 && this.getFemaleImage()) {
+            return { frames: femaleFrames, source: 'female' };
         }
 
         const walkerFrames = this.walkerMeta?.animations?.[animKey];
@@ -201,7 +217,7 @@ export class SpriteAtlas {
     }
 
     isReady() {
-        return Boolean(this.getImage() || this.getExtImage() || this.getWalkerImage() || this.getDeliveryImage());
+        return Boolean(this.getImage() || this.getExtImage() || this.getWalkerImage() || this.getFemaleImage() || this.getDeliveryImage());
     }
 
     getFrameCount(animKey) {
@@ -249,6 +265,14 @@ export class SpriteAtlas {
         return img.naturalWidth / baseWidth;
     }
 
+    getFemaleAtlasScale(img) {
+        if (!img || typeof img.naturalWidth !== 'number' || img.naturalWidth <= 0) {
+            return 1;
+        }
+        const baseWidth = this.femaleMeta?.naturalWidth || img.naturalWidth;
+        return img.naturalWidth / baseWidth;
+    }
+
     /**
      * Dibuja un fotograma de animación alineado a la base central de los pies (centerX, bottomY),
      * o centrado si options.centerAligned === true.
@@ -262,9 +286,11 @@ export class SpriteAtlas {
 
         const img = source === 'delivery'
             ? this.getDeliveryImage()
-            : (source === 'walker'
-                ? this.getWalkerImage()
-                : (source === 'ext' ? this.getExtImage() : this.getImage()));
+            : (source === 'female'
+                ? this.getFemaleImage()
+                : (source === 'walker'
+                    ? this.getWalkerImage()
+                    : (source === 'ext' ? this.getExtImage() : this.getImage())));
         if (!img) return false;
 
         const loop = options.loop !== false;
@@ -273,15 +299,19 @@ export class SpriteAtlas {
         const f = frames[idx];
         const mul = source === 'delivery'
             ? this.getDeliveryAtlasScale(img)
-            : (source === 'walker'
-                ? this.getWalkerAtlasScale(img)
-                : (source === 'ext' ? this.getExtAtlasScale(img) : this.getAtlasScale(img)));
+            : (source === 'female'
+                ? this.getFemaleAtlasScale(img)
+                : (source === 'walker'
+                    ? this.getWalkerAtlasScale(img)
+                    : (source === 'ext' ? this.getExtAtlasScale(img) : this.getAtlasScale(img))));
 
         const refMap = source === 'delivery'
             ? this.deliveryMeta.refHeights
-            : (source === 'walker'
-                ? this.walkerMeta.refHeights
-                : (source === 'ext' ? this.extMeta.refHeights : this.meta.refHeights));
+            : (source === 'female'
+                ? this.femaleMeta.refHeights
+                : (source === 'walker'
+                    ? this.walkerMeta.refHeights
+                    : (source === 'ext' ? this.extMeta.refHeights : this.meta.refHeights)));
         const refH = refMap?.[animKey] || f.h || 48;
         const baseScale = options.targetHeight
             ? (options.targetHeight / refH)

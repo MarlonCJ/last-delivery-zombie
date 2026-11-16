@@ -13,8 +13,9 @@ export const HORDE_ACTIVE_LIMIT = 5;
 export const HORDE_BASE_TOTAL = 10;
 export const HORDE_TOTAL_STEP = 5;
 
+// Nivel 1: solo caminantes de nivel 1 (hombre y mujer).
 const HORDE_VARIANTS_BY_LEVEL = Object.freeze({
-    1: ['walker', 'walker', 'walker', 'runner', 'runner', 'resistant'],
+    1: ['walker', 'walker', 'walker', 'walker', 'walker', 'walker_female', 'walker_female', 'walker_female', 'walker_female', 'walker_female'],
     2: ['runner', 'runner', 'resistant', 'spitter', 'bomber', 'armored', 'leaper'],
     3: ['resistant', 'spitter', 'bomber', 'armored', 'leaper', 'brute'],
     4: ['spitter', 'bomber', 'armored', 'leaper', 'brute', 'brute']

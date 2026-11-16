@@ -480,39 +480,38 @@ export class Level01 {
             spriteAtlas: atlas
         });
 
-        // Las 8 especies de zombis con tabla exacta de puntos:
-        // walker(10), runner(25), resistant(35), spitter(40), bomber(45), armored(60), leaper(60), brute(65)
+        // Nivel 1: únicamente caminantes de nivel 1, hombre y mujer.
         this.enemies = [
-            // Sector 1: Avenida Sur (Caminantes, Corredores y Resistentes)
+            // Sector 1: Avenida Sur
             new Zombie('walker', { x: 550, y: GROUND_Y - 104, patrolMinX: 500, patrolMaxX: 575, spriteAtlas: atlas }),
-            new Zombie('walker', { x: 855, y: GROUND_Y - 104, patrolMinX: 730, patrolMaxX: 1110, spriteAtlas: atlas }),
-            new Zombie('resistant', { x: 1055, y: GROUND_Y - 108, patrolMinX: 890, patrolMaxX: 1135, spriteAtlas: atlas }),
-            new Zombie('walker', { x: 1500, y: GROUND_Y - 104, patrolMinX: 1420, patrolMaxX: 1830, spriteAtlas: atlas }),
-            new Zombie('runner', { x: 1790, y: GROUND_Y - 102, patrolMinX: 1550, patrolMaxX: 1875, spriteAtlas: atlas }),
-            new Zombie('walker', { x: 2060, y: GROUND_Y - 104, patrolMinX: 2005, patrolMaxX: 2340, spriteAtlas: atlas }),
-            new Zombie('bomber', { x: 2555, y: GROUND_Y - 108, patrolMinX: 2450, patrolMaxX: 2790, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 855, y: GROUND_Y - 102, patrolMinX: 730, patrolMaxX: 1110, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 1055, y: GROUND_Y - 104, patrolMinX: 890, patrolMaxX: 1135, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 1500, y: GROUND_Y - 102, patrolMinX: 1420, patrolMaxX: 1830, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 1790, y: GROUND_Y - 104, patrolMinX: 1550, patrolMaxX: 1875, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 2060, y: GROUND_Y - 102, patrolMinX: 2005, patrolMaxX: 2340, spriteAtlas: atlas }),
 
-            // Sector 2: Distrito Comercial (Vomitadores, Saltadores, Corredores y Bomberos)
-            new Zombie('resistant', { x: 2860, y: GROUND_Y - 108, patrolMinX: 2730, patrolMaxX: 2930, spriteAtlas: atlas }),
-            new Zombie('runner', { x: 3210, y: GROUND_Y - 102, patrolMinX: 3100, patrolMaxX: 3440, spriteAtlas: atlas }),
-            new Zombie('leaper', { x: 3820, y: GROUND_Y - 98, patrolMinX: 3680, patrolMaxX: 4160, spriteAtlas: atlas }),
-            new Zombie('runner', { x: 4190, y: GROUND_Y - 102, patrolMinX: 4000, patrolMaxX: 4430, spriteAtlas: atlas }),
-            new Zombie('bomber', { x: 4410, y: GROUND_Y - 108, patrolMinX: 4220, patrolMaxX: 4520, spriteAtlas: atlas }),
-            new Zombie('resistant', { x: 4960, y: GROUND_Y - 108, patrolMinX: 4895, patrolMaxX: 5280, spriteAtlas: atlas }),
-            new Zombie('spitter', { x: 5380, y: GROUND_Y - 104, patrolMinX: 5210, patrolMaxX: 5450, spriteAtlas: atlas }),
+            // Sector 2: Distrito Comercial
+            new Zombie('walker', { x: 2555, y: GROUND_Y - 104, patrolMinX: 2450, patrolMaxX: 2790, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 2860, y: GROUND_Y - 102, patrolMinX: 2730, patrolMaxX: 2930, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 3210, y: GROUND_Y - 104, patrolMinX: 3100, patrolMaxX: 3440, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 3820, y: GROUND_Y - 102, patrolMinX: 3680, patrolMaxX: 4160, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 4190, y: GROUND_Y - 104, patrolMinX: 4000, patrolMaxX: 4430, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 4410, y: GROUND_Y - 102, patrolMinX: 4220, patrolMaxX: 4520, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 4960, y: GROUND_Y - 104, patrolMinX: 4895, patrolMaxX: 5280, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 5380, y: GROUND_Y - 102, patrolMinX: 5210, patrolMaxX: 5450, spriteAtlas: atlas }),
 
-            // Sector 3: Cordón Militar de Cuarentena (Blindados antidisturbios, Saltadores y Bruto Mutante)
-            new Zombie('armored', { x: 5710, y: GROUND_Y - 112, patrolMinX: 5620, patrolMaxX: 5825, spriteAtlas: atlas }),
-            new Zombie('runner', { x: 6180, y: GROUND_Y - 102, patrolMinX: 6060, patrolMaxX: 6490, spriteAtlas: atlas }),
-            new Zombie('bomber', { x: 6460, y: GROUND_Y - 108, patrolMinX: 6220, patrolMaxX: 6680, spriteAtlas: atlas }),
-            new Zombie('leaper', { x: 6760, y: GROUND_Y - 98, patrolMinX: 6610, patrolMaxX: 6840, spriteAtlas: atlas }),
-            new Zombie('armored', { x: 7180, y: GROUND_Y - 112, patrolMinX: 7040, patrolMaxX: 7440, spriteAtlas: atlas }),
-            new Zombie('spitter', { x: 7360, y: GROUND_Y - 104, patrolMinX: 7180, patrolMaxX: 7460, spriteAtlas: atlas }),
-            new Zombie('bomber', { x: 7710, y: GROUND_Y - 108, patrolMinX: 7630, patrolMaxX: 7960, spriteAtlas: atlas }),
-            new Zombie('leaper', { x: 8260, y: GROUND_Y - 98, patrolMinX: 8140, patrolMaxX: 8480, spriteAtlas: atlas }),
-            new Zombie('brute', { x: 8590, y: GROUND_Y - 126, patrolMinX: 8420, patrolMaxX: 8630, spriteAtlas: atlas }),
-            new Zombie('runner', { x: 8995, y: GROUND_Y - 102, patrolMinX: 8960, patrolMaxX: 9210, spriteAtlas: atlas }),
-            new Zombie('resistant', { x: 9130, y: GROUND_Y - 108, patrolMinX: 9010, patrolMaxX: 9230, spriteAtlas: atlas })
+            // Sector 3: Cordón Militar de Cuarentena
+            new Zombie('walker', { x: 5710, y: GROUND_Y - 104, patrolMinX: 5620, patrolMaxX: 5825, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 6180, y: GROUND_Y - 102, patrolMinX: 6060, patrolMaxX: 6490, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 6460, y: GROUND_Y - 104, patrolMinX: 6220, patrolMaxX: 6680, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 6760, y: GROUND_Y - 102, patrolMinX: 6610, patrolMaxX: 6840, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 7180, y: GROUND_Y - 104, patrolMinX: 7040, patrolMaxX: 7440, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 7360, y: GROUND_Y - 102, patrolMinX: 7180, patrolMaxX: 7460, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 7710, y: GROUND_Y - 104, patrolMinX: 7630, patrolMaxX: 7960, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 8260, y: GROUND_Y - 102, patrolMinX: 8140, patrolMaxX: 8480, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 8590, y: GROUND_Y - 104, patrolMinX: 8420, patrolMaxX: 8630, spriteAtlas: atlas }),
+            new Zombie('walker_female', { x: 8995, y: GROUND_Y - 102, patrolMinX: 8960, patrolMaxX: 9210, spriteAtlas: atlas }),
+            new Zombie('walker', { x: 9130, y: GROUND_Y - 104, patrolMinX: 9010, patrolMaxX: 9230, spriteAtlas: atlas })
         ];
     }
 

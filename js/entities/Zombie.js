@@ -29,7 +29,11 @@ export const ZOMBIE_POINT_TABLE = Object.freeze({
 const VARIANT_ALIASES = Object.freeze({
     normal: 'walker',
     fast: 'runner',
-    special: 'bomber'
+    special: 'bomber',
+    female: 'walker_female',
+    caminante_femenina: 'walker_female',
+    z01f_walker: 'walker_female',
+    zombie_walker_female: 'walker_female'
 });
 
 export class Zombie extends Enemy {
@@ -53,6 +57,24 @@ export class Zombie extends Enemy {
                 moneyReward: 0,
                 typeLabel: '01. Zombi Caminante',
                 animPrefix: 'z01',
+                fallbackPrefix: 'znormal'
+            },
+            walker_female: {
+                code: '01F',
+                width: 42,
+                height: 102,
+                visualHeight: 120,
+                maxHealth: 52,
+                speed: 58,
+                chaseSpeed: 98,
+                damage: 10,
+                attackRange: 52,
+                attackCooldownTime: 1.22,
+                aggroRange: 360,
+                scoreReward: ZOMBIE_POINT_TABLE.walker,
+                moneyReward: 0,
+                typeLabel: '01F. Caminante Femenina',
+                animPrefix: 'z01f',
                 fallbackPrefix: 'znormal'
             },
             runner: {
@@ -362,7 +384,7 @@ export class Zombie extends Enemy {
 
         if (this.spriteAtlas && this.spriteAtlas.isReady()) {
             const hasExt = this.spriteAtlas.getFrameCount(`${this.animPrefix}_walk`) > 0 &&
-                Boolean(this.spriteAtlas.getExtImage() || this.spriteAtlas.getWalkerImage());
+                Boolean(this.spriteAtlas.getExtImage() || this.spriteAtlas.getWalkerImage() || this.spriteAtlas.getFemaleImage());
             let animKey = 'znormal_walk';
             let frameIdx = 0;
             let loop = true;
