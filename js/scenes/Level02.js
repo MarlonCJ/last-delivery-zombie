@@ -17,6 +17,7 @@ import { Zombie } from '../entities/Zombie.js';
 import { Boss } from '../entities/Boss.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
 import { HordeSystem } from '../systems/HordeSystem.js';
+import { PortraitSystem } from '../systems/PortraitSystem.js';
 import { LIFE_SCORE_INTERVAL } from '../systems/SaveSystem.js';
 
 const WORLD_WIDTH = 12000;
@@ -215,6 +216,15 @@ export class Level02 {
         this.lastCheckpointX = 80;
         this._lastAvatarKey = '';
 
+        // Retrato reactivo del repartidor (6 expresiones: calma, serio, dolor, risa, rabia, cansancio)
+        if (!this.portrait) {
+            this.portrait = new PortraitSystem(this.hudAvatarCanvas, {
+                assets: this.engine.assets,
+                spriteAtlas: this.engine.spriteAtlas
+            });
+        }
+        this.portrait.reset();
+
         this.horde?.stop();
         this.horde = null;
 
@@ -247,6 +257,7 @@ export class Level02 {
                 if (!enemy.isBoss) {
                     this.zombiesKilled += 1;
                     this.horde?.onZombieKilled(enemy);
+                    this.portrait?.notify('rage');
                 } else {
                     this._handleBossDefeated();
                 }
@@ -753,6 +764,7 @@ export class Level02 {
                 this.engine.economy.addMoney(40);
                 this.player.health = Math.min(this.player.maxHealth, this.player.health + 40);
                 this.engine.inventory.addAmmo('pistol_9mm', 16);
+                this.portrait?.notify('laugh', 2000);
                 this.combat.spawnFloatingText(
                     cp.x - 24,
                     cp.y - 18,
@@ -786,6 +798,7 @@ export class Level02 {
                 this.lastCheckpointX = Math.max(this.lastCheckpointX, this.pickupStation.x + 24);
                 this.engine.audio.playPickup();
                 this.engine.economy.addMoney(35);
+                this.portrait?.notify('laugh', 1500);
                 this.combat.spawnFloatingText(
                     this.player.x - 10,
                     this.player.y - 18,
@@ -812,6 +825,7 @@ export class Level02 {
                 this.lastCheckpointX = ARENA_LOCK_X + 54;
                 this.engine.audio.playPickup();
                 this.engine.economy.addMoney(80);
+                this.portrait?.notify('laugh', 2400);
                 this.combat.spawnFloatingText(
                     this.player.x - 35,
                     this.player.y - 24,
@@ -895,6 +909,7 @@ export class Level02 {
         this.engine.saveSystem.completeLevel(1, ['machete_combat', 'revolver_magnum', 'shotgun_combat', 'smg_tactical']);
         this.engine.saveSystem.completeLevel(2, ['rifle_bio', 'flamethrower_bio']);
         this.engine.audio.playVictory();
+        this.portrait?.notify('laugh', 5000);
 
         if (this.resScore) this.resScore.textContent = `${this.scoreEarnedInRun} PTS`;
         if (this.resZombies) this.resZombies.textContent = String(this.zombiesKilled);
@@ -917,20 +932,19 @@ export class Level02 {
     }
 
     _renderHudAvatar() {
-        if (!this.hudAvatarCanvas || typeof this.hudAvatarCanvas.getContext !== 'function') return;
-        const atlas = this.engine.spriteAtlas;
-        if (!atlas || !atlas.isReady()) return;
+        // El retrato lo pinta PortraitSystem según el estado del jugador y las acciones recientes.
+        this.portrait?.update(this.player, { enemiesNear: this._hasNearbyThreat() });
+    }
 
-        const exprKey = this.player ? this.player.getExpressionKey() : 'face_normal';
-        if (exprKey === this._lastAvatarKey) return;
-        this._lastAvatarKey = exprKey;
-
-        const actx = this.hudAvatarCanvas.getContext('2d');
-        if (!actx || typeof actx.clearRect !== 'function') return;
-        const cw = this.hudAvatarCanvas.width || 116;
-        const ch = this.hudAvatarCanvas.height || 116;
-        actx.clearRect(0, 0, cw, ch);
-        atlas.drawSprite(actx, exprKey, 2, 4, cw - 4, ch - 6);
+    /** ¿Hay zombis o jefe suficientemente cerca como para adoptar la cara seria? */
+    _hasNearbyThreat() {
+        if (!this.player) return false;
+        const px = this.player.x;
+        for (const enemy of this.enemies) {
+            if (!enemy || enemy.removable) continue;
+            if (Math.abs(enemy.x - px) < 460) return true;
+        }
+        return false;
     }
 
     _syncHud() {

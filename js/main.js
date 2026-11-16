@@ -350,6 +350,7 @@ async function bootstrap() {
         { key: 'zombie_walker', type: 'image', src: 'assets/sprites/zombie_walker_hd.png' },
         { key: 'zombie_walker_female', type: 'image', src: 'assets/sprites/zombie_walker_female_hd.png' },
         { key: 'delivery_sprite', type: 'image', src: 'assets/sprites/delivery_sprite_hd.png?v=2' },
+        { key: 'portrait_faces', type: 'image', src: 'assets/portraits/edi_faces_hd.png' },
         { key: 'city_bg', type: 'image', src: 'assets/backgrounds/city_street_hd.png' }
     ]);
     const spriteAtlas = new SpriteAtlas(assetLoader);

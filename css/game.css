@@ -377,6 +377,46 @@
     height: 52px;
 }
 
+/* Retrato reactivo: el borde cambia según la expresión activa */
+.hud-avatar {
+    transition: border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.hud-avatar.mood-calm {
+    border-color: #f5a623;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8), 0 0 8px rgba(245, 166, 35, 0.28);
+}
+
+.hud-avatar.mood-serious {
+    border-color: #6ea8d8;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8), 0 0 8px rgba(110, 168, 216, 0.34);
+}
+
+.hud-avatar.mood-tired {
+    border-color: #7d8ca3;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8), 0 0 7px rgba(125, 140, 163, 0.26);
+}
+
+.hud-avatar.mood-laugh {
+    border-color: #47ff8c;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8), 0 0 10px rgba(71, 255, 140, 0.42);
+}
+
+.hud-avatar.mood-rage {
+    border-color: #ff5a24;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8), 0 0 11px rgba(255, 90, 36, 0.52);
+}
+
+.hud-avatar.mood-pain {
+    border-color: #ff3b46;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8), 0 0 12px rgba(255, 59, 70, 0.58);
+}
+
+.hud-avatar.mood-dead {
+    border-color: #5a2027;
+    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.9), 0 0 6px rgba(120, 30, 38, 0.4);
+}
+
 .hud-bars-col {
     display: flex;
     flex-direction: column;
