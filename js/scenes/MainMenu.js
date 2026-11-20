@@ -25,18 +25,13 @@ export class MainMenu {
             { x: 835, y: 494, scale: 0.54, phase: 4.1 }
         ];
 
-        // Referencias DOM
+        // Referencias DOM (4 botones centrados)
         this.menuOverlay = document.getElementById('main-menu-overlay');
-        this.nameInput = document.getElementById('player-name-input');
-        this.nameFeedback = document.getElementById('player-name-feedback');
-        this.nameCard = document.getElementById('player-id-card');
 
         this.btnStart = document.getElementById('btn-start-game');
         this.btnHowTo = document.getElementById('btn-how-to-play');
         this.btnOptions = document.getElementById('btn-options');
-        this.btnSound = document.getElementById('btn-toggle-sound');
         this.btnExit = document.getElementById('btn-exit-game');
-        this.progressionBadge = document.getElementById('menu-progression-badge');
 
         this._bindMenuEvents();
     }
@@ -75,139 +70,44 @@ export class MainMenu {
     _bindMenuEvents() {
         if (!this.menuOverlay) return;
 
-        // Sonido hover en botones principales
-        const buttons = [this.btnStart, this.btnHowTo, this.btnOptions, this.btnSound, this.btnExit];
+        // Sonido hover en los 4 botones principales
+        const buttons = [this.btnStart, this.btnHowTo, this.btnOptions, this.btnExit];
         for (const btn of buttons) {
             if (!btn) continue;
             btn.addEventListener('pointerenter', () => this.engine.audio.playHover());
         }
 
-        // Campo de nombre del protagonista
-        if (this.nameInput) {
-            this.nameInput.addEventListener('input', () => {
-                const raw = this.nameInput.value;
-                this.engine.saveSystem.setPlayerName(raw);
-                this._clearNameError();
-                this._updateSavedBadge();
-            });
-
-            this.nameInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    this._handleStartGame();
-                }
-            });
-        }
-
-        // Botón INICIAR JUEGO
+        // Botón 1: INICIAR JUEGO
         this.btnStart?.addEventListener('click', () => {
             this._handleStartGame();
         });
 
-        // Botón CÓMO JUGAR
+        // Botón 2: CÓMO JUGAR
         this.btnHowTo?.addEventListener('click', () => {
             this.engine.audio.playClick();
             window.dispatchEvent(new CustomEvent('ldz:open-modal', { detail: { modal: 'howto' } }));
         });
 
-        // Botón OPCIONES
+        // Botón 3: OPCIONES
         this.btnOptions?.addEventListener('click', () => {
             this.engine.audio.playClick();
             window.dispatchEvent(new CustomEvent('ldz:open-modal', { detail: { modal: 'options' } }));
         });
 
-        // Botón SONIDO: ON / OFF
-        this.btnSound?.addEventListener('click', () => {
-            const enabled = this.engine.saveSystem.toggleSound();
-            if (enabled) {
-                this.engine.audio.unlock();
-                this.engine.audio.playClick();
-            }
-            this.syncSoundButtonUI();
-        });
-
-        // Botón SALIR
+        // Botón 4: SALIR (guarda y cierra el juego directamente)
         this.btnExit?.addEventListener('click', () => {
             this.engine.audio.playClick();
-            window.dispatchEvent(new CustomEvent('ldz:open-modal', { detail: { modal: 'exit' } }));
+            window.dispatchEvent(new CustomEvent('ldz:exit-game'));
         });
-
-        // Suscribirse a cambios en SaveSystem para mantener botón de sonido, credencial y progresión sincronizados
-        this.engine.saveSystem.subscribe(() => {
-            this.syncSoundButtonUI();
-            this._updateSavedBadge();
-            this._updateProgressionBadge();
-        });
-    }
-
-    _updateProgressionBadge() {
-        if (!this.progressionBadge) return;
-        const lvl2Unlocked = this.engine.levels.isLevelUnlocked(2);
-        if (lvl2Unlocked) {
-            this.progressionBadge.textContent = '✓ NIVEL 01 SUPERADO — NIVEL 02: PABELLÓN DE URGENCIAS DESBLOQUEADO';
-            this.progressionBadge.classList.add('is-unlocked');
-        } else {
-            this.progressionBadge.textContent = '🎯 MISIÓN ACTIVA: NIVEL 01 — PRIMERA ENTREGA (NV. 02 🔒 BLOQUEADO)';
-            this.progressionBadge.classList.remove('is-unlocked');
-        }
     }
 
     _handleStartGame() {
-        const currentInput = this.nameInput ? this.nameInput.value : '';
-        const savedName = this.engine.saveSystem.setPlayerName(currentInput);
-
-        if (!savedName) {
-            this.engine.audio.playError();
-            if (this.nameCard) {
-                this.nameCard.classList.remove('input-error-shake');
-                void this.nameCard.offsetWidth; // Forzar reflow para reiniciar animación CSS
-                this.nameCard.classList.add('input-error-shake');
-            }
-            if (this.nameFeedback) {
-                this.nameFeedback.textContent = '⚠ Identificación obligatoria: introduce tu nombre de repartidor.';
-                this.nameFeedback.classList.add('is-error');
-            }
-            this.nameInput?.focus();
-            return;
-        }
-
-        this._clearNameError();
+        const savedName = this.engine.saveSystem.setPlayerName();
         this.engine.audio.unlock();
         this.engine.audio.playConfirm();
 
-        // Siempre pasa por la Terminal Pre-Misión (briefing) tras la introducción para asignar las 3 armas antes de jugar
+        // Pasa por la historia introductoria y la Terminal Pre-Misión (briefing) para asignar las 3 armas antes de jugar
         this.engine.sceneManager.transitionTo('introduction', { playerName: savedName, targetScene: 'briefing' }, 0.55);
-    }
-
-    _clearNameError() {
-        this.nameCard?.classList.remove('input-error-shake');
-        this.nameFeedback?.classList.remove('is-error');
-    }
-
-    _updateSavedBadge() {
-        if (!this.nameFeedback) return;
-        const name = this.engine.saveSystem.getPlayerName();
-        if (name) {
-            this.nameFeedback.textContent = `✓ Credencial registrada en memoria local: ${name}`;
-        } else {
-            this.nameFeedback.textContent = 'Registra tu credencial para iniciar el turno nocturno.';
-        }
-    }
-
-    syncSoundButtonUI() {
-        if (!this.btnSound) return;
-        const enabled = this.engine.saveSystem.isSoundEnabled();
-        const statusEl = document.getElementById('sound-status-pill');
-        const iconOn = document.getElementById('sound-icon-on');
-        const iconOff = document.getElementById('sound-icon-off');
-
-        if (statusEl) {
-            statusEl.textContent = enabled ? 'ON' : 'OFF';
-            statusEl.classList.toggle('is-on', enabled);
-            statusEl.classList.toggle('is-off', !enabled);
-        }
-        if (iconOn) iconOn.classList.toggle('hidden', !enabled);
-        if (iconOff) iconOff.classList.toggle('hidden', enabled);
     }
 
     enter() {
@@ -215,13 +115,6 @@ export class MainMenu {
         if (this.menuOverlay) {
             this.menuOverlay.classList.remove('hidden');
         }
-        if (this.nameInput) {
-            this.nameInput.value = this.engine.saveSystem.getPlayerName();
-        }
-        this._clearNameError();
-        this._updateSavedBadge();
-        this._updateProgressionBadge();
-        this.syncSoundButtonUI();
         this.engine.audio.startAmbience('menu');
     }
 
@@ -336,20 +229,12 @@ export class MainMenu {
                 'rgba(255, 186, 92, 0.10)'
             );
 
-            // Oscurecido lateral izquierdo: da contraste al panel del menú sin tapar al protagonista
-            const menuShade = ctx.createLinearGradient(0, 0, 470, 0);
-            menuShade.addColorStop(0, 'rgba(3, 6, 12, 0.60)');
-            menuShade.addColorStop(0.62, 'rgba(3, 6, 12, 0.28)');
-            menuShade.addColorStop(1, 'rgba(3, 6, 12, 0)');
-            ctx.fillStyle = menuShade;
-            ctx.fillRect(0, 0, w, h);
-
-            // Base oscura para que el pie de versión sea legible
-            const bottomShade = ctx.createLinearGradient(0, h - 92, 0, h);
+            // Sombreado inferior sutil para enmarcar el menú compacto sin oscurecer el rostro de EDI
+            const bottomShade = ctx.createLinearGradient(0, h - 180, 0, h);
             bottomShade.addColorStop(0, 'rgba(2, 4, 8, 0)');
-            bottomShade.addColorStop(1, 'rgba(2, 4, 8, 0.62)');
+            bottomShade.addColorStop(1, 'rgba(2, 4, 8, 0.52)');
             ctx.fillStyle = bottomShade;
-            ctx.fillRect(0, h - 92, w, 92);
+            ctx.fillRect(0, h - 180, w, 180);
         } else if (hasCityImg && atlas?.isReady()) {
             if (this.lightningFlash > 0) {
                 ctx.fillStyle = `rgba(195, 220, 255, ${(this.lightningFlash * 0.24).toFixed(3)})`;

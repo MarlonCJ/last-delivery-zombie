@@ -48,8 +48,34 @@ const server = http.createServer((req, res) => {
             return;
         }
         const ext = path.extname(fullPath).toLowerCase();
+        const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+        const total = content.length;
+        const range = req.headers.range;
+
+        if (range && total > 0) {
+            const match = /bytes=(\d*)-(\d*)/.exec(range);
+            if (match) {
+                const start = match[1] ? parseInt(match[1], 10) : 0;
+                const end = match[2] ? Math.min(total - 1, parseInt(match[2], 10)) : total - 1;
+                if (start <= end && start < total) {
+                    const chunk = content.subarray(start, end + 1);
+                    res.writeHead(206, {
+                        'Content-Range': `bytes ${start}-${end}/${total}`,
+                        'Accept-Ranges': 'bytes',
+                        'Content-Length': chunk.length,
+                        'Content-Type': contentType,
+                        'Cache-Control': 'no-cache'
+                    });
+                    res.end(chunk);
+                    return;
+                }
+            }
+        }
+
         res.writeHead(200, {
-            'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+            'Accept-Ranges': 'bytes',
+            'Content-Length': total,
+            'Content-Type': contentType,
             'Cache-Control': 'no-cache'
         });
         res.end(content);

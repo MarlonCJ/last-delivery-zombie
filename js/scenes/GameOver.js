@@ -46,7 +46,7 @@ export class GameOver {
             this.engine.inventory.resetMissionLoadout();
         }
 
-        const name = this.engine.saveSystem.getPlayerName() || 'Repartidor';
+        const name = this.engine.saveSystem.getPlayerName() || 'EDI';
         const kills = params.zombiesKilled ?? 0;
         const secs = Math.floor(params.timeSeconds ?? 0);
         const finalScore = params.finalScore ?? 0;
@@ -57,7 +57,7 @@ export class GameOver {
         }
 
         this.overlay?.classList.remove('hidden');
-        this.engine.audio.startAmbience('intro');
+        this.engine.audio.startAmbience('gameover');
         this.engine.audio.playZombieTransformation?.();
         this._renderZombifiedCourierScene();
     }

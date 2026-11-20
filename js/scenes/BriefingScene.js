@@ -213,7 +213,7 @@ export class BriefingScene {
 
     enter(params = {}) {
         this.time = 0;
-        const playerName = this.engine.saveSystem.getPlayerName() || 'Repartidor';
+        const playerName = this.engine.saveSystem.getPlayerName() || 'EDI';
         if (this.courierNameEl) {
             this.courierNameEl.textContent = playerName;
         }

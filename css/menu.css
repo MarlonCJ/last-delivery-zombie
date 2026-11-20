@@ -5,9 +5,9 @@
 #main-menu-overlay {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 0 0 0 30px;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 0 24px 0;
 }
 
 /* --- Logotipo Cinematográfico LAST DELIVERY ZOMBIE ---
@@ -32,24 +32,43 @@
     overflow: visible;
 }
 
-/* --- Panel de Portada (Nombre + Botonera) ---
-   Se coloca a la izquierda de la ilustración para dejar visible al protagonista,
-   el título y la horda de zombis de la derecha. */
+/* --- Panel de Portada Centrado y Compacto (debajo del rostro del protagonista) --- */
 .menu-center-stack {
-    width: 340px;
+    width: 286px;
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 8px;
     z-index: 20;
-    padding: 11px;
-    border-radius: 10px;
-    background: linear-gradient(180deg, rgba(8, 12, 20, 0.86) 0%, rgba(6, 9, 15, 0.82) 100%);
-    border: 1px solid rgba(112, 141, 178, 0.28);
-    border-left: 3px solid rgba(224, 30, 43, 0.88);
+    padding: 12px 14px;
+    border-radius: 9px;
+    background: linear-gradient(180deg, rgba(8, 12, 20, 0.84) 0%, rgba(5, 8, 14, 0.88) 100%);
+    border: 1px solid rgba(125, 154, 190, 0.34);
+    border-top: 2.5px solid rgba(224, 30, 43, 0.9);
     box-shadow:
-        0 18px 46px rgba(0, 0, 0, 0.66),
-        inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(3px);
+        0 14px 34px rgba(0, 0, 0, 0.78),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(4px);
+}
+
+#main-menu-overlay .menu-btn {
+    height: 40px;
+    padding: 0 18px;
+    gap: 9px;
+    font-size: 16.5px;
+    letter-spacing: 1.4px;
+    border-width: 1.5px;
+    border-radius: 6px;
+}
+
+#main-menu-overlay .menu-btn.menu-btn-primary {
+    height: 46px;
+    font-size: 18.5px;
+}
+
+#main-menu-overlay .menu-btn-icon,
+#main-menu-overlay .menu-btn-icon svg {
+    width: 18px;
+    height: 18px;
 }
 
 /* Tarjeta metálica de identificación del protagonista */
@@ -96,22 +115,48 @@
     line-height: 1;
 }
 
-#player-name-input {
-    width: 100%;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: #ffffff;
-    font-family: var(--font-ui);
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    user-select: text;
+.courier-fixed-card {
+    padding: 8px 12px;
 }
 
-#player-name-input::placeholder {
-    color: #5b6b80;
-    font-weight: 500;
+.courier-fixed-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.courier-fixed-tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #9cb0c9;
+}
+
+.courier-identity-row {
+    cursor: default;
+}
+
+.courier-name-value {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 2.4px;
+    line-height: 1;
+    color: #ffffff;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 70, 84, 0.18);
+}
+
+.courier-name-role {
+    margin-left: auto;
+    padding: 2px 6px;
+    border: 1px solid #2e3b4e;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: #7992ad;
 }
 
 .courier-feedback {
@@ -446,6 +491,15 @@
     font-family: var(--font-mono);
     font-size: 12px;
     color: var(--text-secondary);
+}
+
+.option-hint {
+    margin-top: -6px;
+    margin-bottom: 4px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.4;
+    color: #7992ad;
 }
 
 .option-toggle-btn,

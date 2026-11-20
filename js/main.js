@@ -41,7 +41,6 @@ function setupGlobalModals(engine) {
 
     const modalHowTo = document.getElementById('modal-how-to-play');
     const modalOptions = document.getElementById('modal-options');
-    const modalExit = document.getElementById('modal-exit');
     const exitStandbyScreen = document.getElementById('exit-standby-screen');
 
     const closeAllModals = () => {
@@ -50,7 +49,6 @@ function setupGlobalModals(engine) {
         }
         modalHowTo?.classList.add('hidden');
         modalOptions?.classList.add('hidden');
-        modalExit?.classList.add('hidden');
     };
 
     // --- Sincronización dinámica de la tabla de controles en "CÓMO JUGAR" ---
@@ -101,6 +99,59 @@ function setupGlobalModals(engine) {
     const btnResetControls = document.getElementById('btn-reset-controls');
     const btnResetSave = document.getElementById('btn-reset-save');
     const resetSaveFeedback = document.getElementById('opt-reset-feedback');
+    const optFullscreenToggle = document.getElementById('opt-fullscreen-toggle');
+
+    // --- Pantalla completa ---
+    const docEl = document.documentElement;
+    const fullscreenSupported = Boolean(docEl?.requestFullscreen || docEl?.webkitRequestFullscreen);
+    const isFullscreen = () => Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+
+    const syncFullscreenUI = () => {
+        if (!optFullscreenToggle) return;
+        if (!fullscreenSupported) {
+            optFullscreenToggle.textContent = 'NO DISPONIBLE';
+            optFullscreenToggle.disabled = true;
+            optFullscreenToggle.classList.remove('is-on', 'is-off');
+            return;
+        }
+        const active = isFullscreen();
+        optFullscreenToggle.textContent = active ? 'ACTIVADA (ON)' : 'DESACTIVADA (OFF)';
+        optFullscreenToggle.classList.toggle('is-on', active);
+        optFullscreenToggle.classList.toggle('is-off', !active);
+    };
+
+    const toggleFullscreen = async () => {
+        if (!fullscreenSupported) return;
+        try {
+            if (isFullscreen()) {
+                if (document.exitFullscreen) {
+                    await document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            } else if (docEl.requestFullscreen) {
+                await docEl.requestFullscreen();
+            } else if (docEl.webkitRequestFullscreen) {
+                docEl.webkitRequestFullscreen();
+            }
+        } catch (err) {
+            console.warn('[Main] No se pudo cambiar el modo de pantalla completa.', err);
+        }
+        engine.renderer?.resize?.();
+        syncFullscreenUI();
+    };
+
+    optFullscreenToggle?.addEventListener('click', () => {
+        audio.playClick();
+        toggleFullscreen();
+    });
+
+    const onFullscreenChange = () => {
+        engine.renderer?.resize?.();
+        syncFullscreenUI();
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
     const renderRebindRows = () => {
         if (!controlsListContainer) return;
@@ -170,6 +221,7 @@ function setupGlobalModals(engine) {
         if (optParticles) optParticles.value = s.particleQuality;
         if (optShowFps) optShowFps.checked = s.showFps;
 
+        syncFullscreenUI();
         renderRebindRows();
     };
 
@@ -221,7 +273,7 @@ function setupGlobalModals(engine) {
             audio.playError();
             btnResetSave.textContent = '¿CONFIRMAR BORRADO DE PERFIL?';
             if (resetSaveFeedback) {
-                resetSaveFeedback.textContent = 'Pulsa de nuevo para borrar nombre y progreso guardado.';
+                resetSaveFeedback.textContent = 'Pulsa de nuevo para borrar todo el progreso guardado.';
             }
             return;
         }
@@ -234,42 +286,50 @@ function setupGlobalModals(engine) {
             resetSaveFeedback.textContent = '✓ Datos locales restablecidos a valores de fábrica.';
         }
 
-        const nameInput = document.getElementById('player-name-input');
-        if (nameInput) nameInput.value = '';
-        const nameFeedback = document.getElementById('player-name-feedback');
-        if (nameFeedback) {
-            nameFeedback.textContent = 'Registra tu credencial para iniciar el turno nocturno.';
-            nameFeedback.classList.remove('is-error');
-        }
         syncOptionsUIFromSave();
         refreshHowToControls();
     });
 
-    // --- Modal SALIR y pantalla de sesión finalizada ---
-    const btnConfirmExit = document.getElementById('btn-confirm-exit');
-    const btnReconnect = document.getElementById('btn-reconnect-game');
-
-    btnConfirmExit?.addEventListener('click', () => {
+    // --- SALIR: guarda y cierra el juego inmediatamente ---
+    const performExit = () => {
         saveSystem.save();
+        audio.stopIntroCues?.();
         audio.stopAmbience();
+        if (audio.destroy) {
+            audio.destroy();
+        } else if (audio.ctx && typeof audio.ctx.close === 'function') {
+            audio.ctx.close().catch(() => {});
+        }
         engine.stop();
         closeAllModals();
 
-        // Intentar cerrar pestaña si fue abierta mediante script; en caso contrario mostrar pantalla segura de salida
+        if (isFullscreen() && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+        }
+
+        // Intentar cerrar la ventana/pestaña directamente dentro del gesto del usuario
+        try {
+            window.open('', '_self');
+            window.close();
+        } catch (_) {}
         try {
             window.close();
         } catch (_) {}
 
+        // Si el navegador bloquea window.close() en pestañas abiertas manualmente,
+        // descargamos el juego navegando a about:blank y mostramos el cierre definitivo.
         exitStandbyScreen?.classList.remove('hidden');
-    });
+        const mainOverlay = document.getElementById('main-menu-overlay');
+        mainOverlay?.classList.add('hidden');
 
-    btnReconnect?.addEventListener('click', () => {
-        exitStandbyScreen?.classList.add('hidden');
-        engine.start();
-        audio.unlock();
-        audio.playConfirm();
-        engine.sceneManager.switchImmediate('mainMenu');
-    });
+        window.setTimeout(() => {
+            if (!window.closed && window.location && typeof window.location.replace === 'function') {
+                window.location.replace('about:blank');
+            }
+        }, 90);
+    };
+
+    window.addEventListener('ldz:exit-game', performExit);
 
     // Botones genéricos de cierre de modal
     document.querySelectorAll('[data-close-modal]').forEach(btn => {
@@ -286,7 +346,7 @@ function setupGlobalModals(engine) {
     // Cerrar modal con tecla ESC (si no se está capturando tecla para controles)
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && !input.isCapturingKey()) {
-            const anyOpen = [modalHowTo, modalOptions, modalExit].some(
+            const anyOpen = [modalHowTo, modalOptions].some(
                 el => el && !el.classList.contains('hidden')
             );
             if (anyOpen) {
@@ -312,8 +372,6 @@ function setupGlobalModals(engine) {
             if (resetSaveFeedback) resetSaveFeedback.textContent = '';
             syncOptionsUIFromSave();
             modalOptions?.classList.remove('hidden');
-        } else if (target === 'exit') {
-            modalExit?.classList.remove('hidden');
         }
     });
 
@@ -336,6 +394,7 @@ async function bootstrap() {
     const renderer = new Renderer2D(canvas, stageElement, saveSystem);
     const inputManager = new InputManager(saveSystem, canvas);
     const audioManager = new AudioManager(saveSystem);
+    audioManager.preloadLibrary();
     const economySystem = new EconomySystem(saveSystem);
     const levelSystem = new LevelSystem(saveSystem);
     const inventorySystem = new InventorySystem(saveSystem);
@@ -345,11 +404,18 @@ async function bootstrap() {
     // 2. Precarga inicial de recursos gráficos en alta definición (portada ilustrada HD, atlas HD 4x, atlas extendido HD 2x y fondo urbano HD)
     await assetLoader.preload([
         { key: 'menu_cover', type: 'image', src: 'assets/backgrounds/menu_cover_hd.jpg' },
+        { key: 'level01_bg', type: 'image', src: 'assets/backgrounds/level01_road_hd.jpg?v=5' },
+        { key: 'intro_scene_01', type: 'image', src: 'assets/intro/intro_scene01.jpg' },
+        { key: 'intro_scene_02', type: 'image', src: 'assets/intro/intro_scene02.jpg' },
+        { key: 'intro_scene_03', type: 'image', src: 'assets/intro/intro_scene03.jpg' },
+        { key: 'intro_scene_04', type: 'image', src: 'assets/intro/intro_scene04.jpg' },
+        { key: 'intro_scene_05', type: 'image', src: 'assets/intro/intro_scene05.jpg' },
+        { key: 'intro_scene_06', type: 'image', src: 'assets/intro/intro_scene06.jpg' },
         { key: 'game_atlas', type: 'image', src: 'assets/sprites/game_atlas_hd.png?v=2' },
         { key: 'game_atlas_ext', type: 'image', src: 'assets/sprites/game_atlas_ext_hd.png?v=2' },
         { key: 'zombie_walker', type: 'image', src: 'assets/sprites/zombie_walker_hd.png' },
         { key: 'zombie_walker_female', type: 'image', src: 'assets/sprites/zombie_walker_female_hd.png' },
-        { key: 'delivery_sprite', type: 'image', src: 'assets/sprites/delivery_sprite_hd.png?v=2' },
+        { key: 'delivery_sprite', type: 'image', src: 'assets/sprites/delivery_sprite_hd.png?v=4' },
         { key: 'portrait_faces', type: 'image', src: 'assets/portraits/edi_faces_hd.png' },
         { key: 'city_bg', type: 'image', src: 'assets/backgrounds/city_street_hd.png' }
     ]);

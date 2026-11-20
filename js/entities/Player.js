@@ -11,12 +11,12 @@ import { Physics2D } from '../core/Physics2D.js';
 import { CollisionSystem } from '../core/CollisionSystem.js';
 
 export class Player {
-    constructor({ x, y, inventory, audio, spriteAtlas = null }) {
+    constructor({ x, y, inventory, audio, spriteAtlas = null, width = 44, height = 108, visualHeight = 114 }) {
         this.x = x;
         this.y = y;
-        this.width = 44;
-        this.height = 108;
-        this.visualHeight = 114;
+        this.width = width;
+        this.height = height;
+        this.visualHeight = visualHeight;
 
         this.vx = 0;
         this.vy = 0;
@@ -409,7 +409,7 @@ export class Player {
 
         const dmg = this.inventory.getEffectiveDamage(weapon.id);
         const muzzleX = this.facing > 0 ? this.x + this.width + 14 : this.x - 22;
-        const muzzleY = this.y + (this.crouching ? 62 : 40);
+        const muzzleY = this.y + Math.round(this.height * (this.crouching ? 0.57 : 0.37));
 
         combatCallbacks?.onPlayerMuzzleShot?.(muzzleX, muzzleY, this.facing, weapon.id);
 
@@ -655,9 +655,8 @@ export class Player {
 
     renderFlashlight(renderer, cameraX, cameraY) {
         if (this.dead) return;
-        const crouchOffset = this.crouching ? 18 : 0;
         const originX = (this.facing > 0 ? this.x + this.width + 8 : this.x - 8) - cameraX;
-        const originY = this.y + 44 + crouchOffset - cameraY;
+        const originY = this.y + Math.round(this.height * (this.crouching ? 0.57 : 0.41)) - cameraY;
         const angle = this.facing > 0 ? 0.04 : Math.PI - 0.04;
 
         renderer.drawLightCone(
@@ -733,11 +732,13 @@ export class Player {
                     animKey = 'player_climb';
                     frameIdx = Math.floor(this.stridePhase);
                     break;
-                case 'crouch':
+                case 'crouch': {
                     animKey = 'player_crouch';
-                    frameIdx = Math.abs(this.vx) > 10 ? (Math.floor(this.animTime * 5.5) % 2) : 0;
+                    const count = Math.max(1, this.spriteAtlas.getFrameCount(animKey));
+                    frameIdx = Math.abs(this.vx) > 10 ? (Math.floor(this.animTime * 6.5) % count) : Math.min(count - 1, 1);
                     loop = false;
                     break;
+                }
                 case 'roll': {
                     animKey = 'player_roll';
                     const count = Math.max(1, this.spriteAtlas.getFrameCount(animKey));
@@ -782,7 +783,21 @@ export class Player {
                 }
                 case 'attack': {
                     const prog = 1 - Math.max(0, this.attackAnimTimer / Math.max(0.01, this.attackAnimDuration));
-                    animKey = this.lastAttackType === 'melee' ? 'player_melee' : 'player_shoot';
+                    const wpnId = this.inventory.getEquippedWeapon()?.id;
+                    const weaponAnimMap = {
+                        flashlight_melee: 'player_melee',
+                        machete_combat: 'player_atk_machete',
+                        pistol_9mm: 'player_atk_pistol',
+                        revolver_magnum: 'player_atk_revolver',
+                        shotgun_combat: 'player_atk_shotgun',
+                        smg_tactical: 'player_atk_smg',
+                        rifle_bio: 'player_atk_rifle',
+                        flamethrower_bio: 'player_atk_flamethrower'
+                    };
+                    const mappedKey = weaponAnimMap[wpnId];
+                    animKey = (mappedKey && this.spriteAtlas.getFrameCount(mappedKey) > 0)
+                        ? mappedKey
+                        : (this.lastAttackType === 'melee' ? 'player_melee' : 'player_shoot');
                     const count = Math.max(1, this.spriteAtlas.getFrameCount(animKey));
                     frameIdx = Math.min(count - 1, Math.floor(prog * count));
                     loop = false;

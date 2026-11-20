@@ -7,20 +7,20 @@ export const LEVEL_MANIFEST = Object.freeze([
     {
         id: 1,
         code: 'LEVEL_01',
-        name: 'PRIMERA ENTREGA',
-        subtitle: 'Distrito Central — Zona en Cuarentena Nocturna',
-        difficulty: 'Normal',
-        setting: 'Ciudad abandonada durante la noche: calles destruidas, vehículos abandonados e iluminación de emergencia.',
-        pickupPoint: 'Puesto de Suministros Sur',
-        deliveryPoint: 'Refugio Civil — Zona Segura Norte',
+        name: 'EMBOSCADA EN LA CARRETERA',
+        subtitle: 'Carretera Nocturna — Lugar del Accidente',
+        difficulty: 'Normal (Contrarreloj 01:00)',
+        setting: 'Carretera nocturna a las afueras de la ciudad junto a la moto de EDI y el vehículo volcado.',
+        pickupPoint: 'Motocicleta de EDI',
+        deliveryPoint: 'Zona del Accidente Despejada',
         objectives: [
-            'Recibir el paquete sellado en el punto de recepción.',
-            'Cruzar las calles infestadas y transportar la carga intacta.',
-            'Entregar el paquete en la Zona Segura y derrotar al Jefe Final.'
+            'Enfrenta y elimina a los 5 zombis en la carretera.',
+            'Completa el combate antes de que se agote el tiempo límite de 1 minuto (01:00).',
+            'Sobrevive para guardar tu progreso y desbloquear el Nivel 02.'
         ],
-        enemies: ['Zombi Caminante (10 pts)', 'Zombi Corredor (25 pts)', 'Zombi Resistente (35 pts)', 'Zombi Vomitador (40 pts)', 'Zombi Bombero (45 pts)', 'Zombi Blindado (60 pts)', 'Boss Mutante (100 pts)'],
+        enemies: ['5 Zombis en Carretera (Caminantes y Corredores)'],
         baseMoneyReward: 250,
-        baseScoreReward: 0
+        baseScoreReward: 100
     },
     {
         id: 2,

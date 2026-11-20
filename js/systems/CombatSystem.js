@@ -182,6 +182,7 @@ export class CombatSystem {
         if (!player || player.dead) return;
         const damaged = player.takeDamage(damage, enemy.x + enemy.width * 0.5);
         if (damaged) {
+            this.audio?.playZombieGroan?.(0.72);
             this.camera?.shake(9, 0.24);
             const px = player.x + player.width * 0.5;
             const py = player.y + 42;

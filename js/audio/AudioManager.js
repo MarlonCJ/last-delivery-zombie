@@ -1,10 +1,57 @@
 /**
  * AudioManager.js
- * Motor de sonido de alto impacto basado exclusivamente en Web Audio API.
- * Incluye cadena de compresión dinámica + saturación armónica cálida para que
- * disparos, explosiones, golpes viscerales, casquillos, empuje de cajas y rugidos
- * suenen contundentes, duros y realistas sin dependencias externas.
+ * Motor híbrido de sonido y música ambientada para LAST DELIVERY ZOMBIE.
+ * Vincula la librería descargada en `assets/audio/` (pistas musicales de terror/acción,
+ * lluvia nocturna y 21 efectos de sonido reales para las 6 escenas de Introducción y el
+ * combate) con el mezclador dinámico de Web Audio API y respaldos procedurales instantáneos.
  */
+
+export const AUDIO_LIBRARY = Object.freeze({
+    // Pistas musicales y ambiente continuo
+    music_menu: 'assets/audio/music_menu.mp3',
+    music_intro: 'assets/audio/music_intro.mp3',
+    music_gameplay: 'assets/audio/music_gameplay.mp3',
+    amb_rain_night: 'assets/audio/amb_rain_night.ogg',
+
+    // Efectos narrativos de las 6 escenas de Introducción
+    sfx_phone_ring: 'assets/audio/sfx_phone_ring.mp3',
+    sfx_motorcycle: 'assets/audio/sfx_motorcycle.ogg',
+    sfx_hospital_beep: 'assets/audio/sfx_hospital_beep.ogg',
+    sfx_car_pass: 'assets/audio/sfx_car_pass.ogg',
+    sfx_car_crash: 'assets/audio/sfx_car_crash.wav',
+    sfx_thunder: 'assets/audio/sfx_thunder.ogg',
+    sfx_siren: 'assets/audio/sfx_siren.ogg',
+
+    // Efectos de combate, armas, zombis e interfaz
+    sfx_pistol: 'assets/audio/sfx_pistol.wav',
+    sfx_shotgun: 'assets/audio/sfx_shotgun.ogg',
+    sfx_reload: 'assets/audio/sfx_reload.mp3',
+    sfx_melee: 'assets/audio/sfx_melee.mp3',
+    sfx_zombie_groan: 'assets/audio/sfx_zombie_groan.mp3',
+    sfx_zombie_death: 'assets/audio/sfx_zombie_death.wav',
+    sfx_zombie_roar: 'assets/audio/sfx_zombie_roar.ogg',
+    sfx_zombie_hit: 'assets/audio/sfx_zombie_hit.mp3',
+    sfx_explosion: 'assets/audio/sfx_explosion.ogg',
+    sfx_pickup: 'assets/audio/sfx_pickup.ogg',
+    sfx_heal: 'assets/audio/sfx_heal.ogg',
+    sfx_victory: 'assets/audio/sfx_victory.mp3',
+    sfx_gameover: 'assets/audio/sfx_gameover.ogg',
+    sfx_ui_click: 'assets/audio/sfx_ui_click.wav'
+});
+
+const STREAM_KEYS = new Set([
+    'music_menu',
+    'music_intro',
+    'music_gameplay',
+    'amb_rain_night'
+]);
+
+const AMBIENCE_PRESETS = Object.freeze({
+    menu: { musicKey: 'music_menu', musicScale: 0.68, rainScale: 0.28, rate: 1.0 },
+    intro: { musicKey: 'music_intro', musicScale: 0.72, rainScale: 0.22, rate: 1.0 },
+    gameplay: { musicKey: 'music_gameplay', musicScale: 0.66, rainScale: 0.20, rate: 1.0 },
+    gameover: { musicKey: 'music_intro', musicScale: 0.52, rainScale: 0.30, rate: 0.88 }
+});
 
 export class AudioManager {
     constructor(saveSystem) {
@@ -14,13 +61,27 @@ export class AudioManager {
         this.musicGain = null;
         this.sfxGain = null;
         this.sfxBus = null;
+        this.sampleBus = null;
         this.compressor = null;
 
-        this.noiseBuffer = null;      // Ruido marrón-rosado (lluvia, truenos, sub-explosiones)
-        this.whiteNoiseBuffer = null; // Ruido blanco de alta presión (disparos reales, chispas, impactos)
+        this.noiseBuffer = null;
+        this.whiteNoiseBuffer = null;
         this.ambientNodes = null;
         this.pulseTimer = null;
         this.currentAmbienceMode = 'none';
+
+        // Caché de buffers decodificados (SFX) y streams HTMLAudioElement (Música/Lluvia)
+        this.rawAudioData = new Map();
+        this.sfxBuffers = new Map();
+        this.streamElements = new Map();
+        this._activeStreams = [];
+        this._preloadStarted = false;
+        this._decodingInFlight = new Set();
+
+        // Control de escenas de introducción y cooldown de gruñidos
+        this._activeIntroSources = [];
+        this._introTimers = [];
+        this._lastGroanAt = 0;
 
         this._unlockHandler = this.unlock.bind(this);
         window.addEventListener('pointerdown', this._unlockHandler, { passive: true });
@@ -35,9 +96,89 @@ export class AudioManager {
         window.removeEventListener('pointerdown', this._unlockHandler);
         window.removeEventListener('keydown', this._unlockHandler);
         if (this._unsubscribeSave) this._unsubscribeSave();
+        this.stopIntroCues();
         this.stopAmbience();
+        for (const el of this.streamElements.values()) {
+            try {
+                el.pause();
+                el.src = '';
+            } catch (_) {}
+        }
+        this.streamElements.clear();
         if (this.ctx && this.ctx.state !== 'closed') {
-            this.ctx.close();
+            this.ctx.close().catch?.(() => {});
+        }
+    }
+
+    /**
+     * Inicia la descarga asíncrona en segundo plano de todos los efectos y pistas
+     * almacenados en `assets/audio/` sin bloquear el arranque visual del juego.
+     */
+    async preloadLibrary() {
+        if (this._preloadStarted) return;
+        this._preloadStarted = true;
+
+        // 1. Preparar elementos de streaming para música y lluvia si el entorno es navegador
+        if (typeof window !== 'undefined' && typeof window.Audio === 'function') {
+            for (const key of STREAM_KEYS) {
+                const src = AUDIO_LIBRARY[key];
+                if (!src || this.streamElements.has(key)) continue;
+                try {
+                    const audioEl = new window.Audio(src);
+                    audioEl.loop = true;
+                    audioEl.preload = 'auto';
+                    audioEl.volume = 0;
+                    this.streamElements.set(key, audioEl);
+                } catch (_) {}
+            }
+        }
+
+        // 2. Descargar buffers binarios de todos los efectos de sonido (SFX)
+        if (typeof fetch !== 'function') return;
+
+        const sfxEntries = Object.entries(AUDIO_LIBRARY).filter(([k]) => !STREAM_KEYS.has(k));
+        await Promise.allSettled(
+            sfxEntries.map(async ([key, src]) => {
+                try {
+                    const res = await fetch(src);
+                    if (!res.ok) return;
+                    const arr = await res.arrayBuffer();
+                    if (arr && arr.byteLength > 64) {
+                        this.rawAudioData.set(key, arr);
+                        if (this.ctx) {
+                            await this._decodeSingleBuffer(key);
+                        }
+                    }
+                } catch (_) {}
+            })
+        );
+    }
+
+    async _decodePendingBuffers() {
+        if (!this.ctx) return;
+        for (const key of this.rawAudioData.keys()) {
+            if (!this.sfxBuffers.has(key) && !this._decodingInFlight.has(key)) {
+                this._decodeSingleBuffer(key);
+            }
+        }
+    }
+
+    async _decodeSingleBuffer(key) {
+        if (!this.ctx || this.sfxBuffers.has(key) || this._decodingInFlight.has(key)) return;
+        const raw = this.rawAudioData.get(key);
+        if (!raw) return;
+
+        this._decodingInFlight.add(key);
+        try {
+            const copy = raw.slice(0);
+            const decoded = await this.ctx.decodeAudioData(copy);
+            if (decoded) {
+                this.sfxBuffers.set(key, decoded);
+            }
+        } catch (_) {
+            // Si algún códec falla en un navegador específico, se mantiene el sintetizador de respaldo
+        } finally {
+            this._decodingInFlight.delete(key);
         }
     }
 
@@ -53,7 +194,10 @@ export class AudioManager {
     }
 
     _ensureContext() {
-        if (this.ctx) return true;
+        if (this.ctx) {
+            this._decodePendingBuffers();
+            return true;
+        }
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (!AudioCtx) {
             if (!this._unsupportedWarned) {
@@ -69,28 +213,34 @@ export class AudioManager {
         this.musicGain = this.ctx.createGain();
         this.sfxGain = this.ctx.createGain();
         this.sfxBus = this.ctx.createGain();
-        this.sfxBus.gain.value = 1.48; // Ganancia extra de pegada para efectos duros
+        this.sfxBus.gain.value = 1.38;
+
+        // Bus limpio para muestras descargadas (sin distorsión de waveshaper)
+        this.sampleBus = this.ctx.createGain();
+        this.sampleBus.gain.value = 1.12;
 
         const shaper = this.ctx.createWaveShaper();
-        shaper.curve = this._makeSaturationCurve(26);
+        shaper.curve = this._makeSaturationCurve(24);
         shaper.oversample = '2x';
 
         this.compressor = this.ctx.createDynamicsCompressor();
         this.compressor.threshold.value = -14;
         this.compressor.knee.value = 10;
-        this.compressor.ratio.value = 6.5;
-        this.compressor.attack.value = 0.002;
+        this.compressor.ratio.value = 5.5;
+        this.compressor.attack.value = 0.003;
         this.compressor.release.value = 0.14;
 
         this.musicGain.connect(this.masterGain);
         this.sfxBus.connect(shaper);
         shaper.connect(this.compressor);
+        this.sampleBus.connect(this.compressor);
         this.compressor.connect(this.sfxGain);
         this.sfxGain.connect(this.masterGain);
         this.masterGain.connect(this.ctx.destination);
 
         this._createNoiseBuffers();
         this.syncVolumes();
+        this._decodePendingBuffers();
         return true;
     }
 
@@ -117,16 +267,31 @@ export class AudioManager {
     }
 
     unlock() {
-        if (!this._ensureContext()) return;
-        if (this.ctx.state === 'suspended') {
+        this._ensureContext();
+        if (this.ctx && this.ctx.state === 'suspended') {
             this.ctx.resume().then(() => {
-                if (this.currentAmbienceMode !== 'none' && !this.ambientNodes) {
-                    const desiredMode = this.currentAmbienceMode;
-                    this.currentAmbienceMode = 'none';
-                    this.startAmbience(desiredMode);
-                }
+                this._resumeDesiredAmbience();
             }).catch(() => {});
-        } else if (this.currentAmbienceMode !== 'none' && !this.ambientNodes) {
+        } else {
+            this._resumeDesiredAmbience();
+        }
+    }
+
+    _resumeDesiredAmbience() {
+        if (this.currentAmbienceMode === 'none') return;
+        if (this._activeStreams.length > 0) {
+            const settings = this.saveSystem.getSettings();
+            if (settings.soundEnabled) {
+                for (const item of this._activeStreams) {
+                    if (item.el.paused) {
+                        item.el.play().catch(() => {});
+                    }
+                }
+            }
+            this.syncVolumes();
+            return;
+        }
+        if (!this.ambientNodes) {
             const desiredMode = this.currentAmbienceMode;
             this.currentAmbienceMode = 'none';
             this.startAmbience(desiredMode);
@@ -134,21 +299,147 @@ export class AudioManager {
     }
 
     syncVolumes() {
-        if (!this.ctx || !this.masterGain) return;
         const settings = this.saveSystem.getSettings();
-        const now = this.ctx.currentTime;
         const targetMaster = settings.soundEnabled ? settings.masterVolume : 0;
 
-        this.masterGain.gain.setTargetAtTime(targetMaster, now, 0.04);
-        this.musicGain.gain.setTargetAtTime(settings.musicVolume, now, 0.04);
-        this.sfxGain.gain.setTargetAtTime(settings.sfxVolume, now, 0.04);
+        if (this.ctx && this.masterGain) {
+            const now = this.ctx.currentTime;
+            this.masterGain.gain.setTargetAtTime(targetMaster, now, 0.04);
+            this.musicGain.gain.setTargetAtTime(settings.musicVolume, now, 0.04);
+            this.sfxGain.gain.setTargetAtTime(settings.sfxVolume, now, 0.04);
+        }
+
+        // Sincronizar pistas musicales descargadas (HTMLAudioElement)
+        for (const item of this._activeStreams) {
+            const vol = Math.max(0, Math.min(1, targetMaster * settings.musicVolume * item.scale));
+            item.el.volume = vol;
+            if (!settings.soundEnabled && !item.el.paused) {
+                item.el.pause();
+            } else if (settings.soundEnabled && item.el.paused) {
+                item.el.play().catch(() => {});
+            }
+        }
+    }
+
+    /**
+     * Reproduce un efecto de sonido real descargado desde `this.sfxBuffers`.
+     * Devuelve `true` si la muestra descargada se reprodujo, o `false` si aún está decodificando.
+     */
+    _playSample(key, options = {}) {
+        if (!this._canPlaySfx() || !this.sampleBus) return false;
+        const buffer = this.sfxBuffers.get(key);
+        if (!buffer) {
+            this._decodeSingleBuffer(key);
+            return false;
+        }
+
+        const {
+            volume = 0.85,
+            rate = 1.0,
+            offset = 0,
+            maxDuration = 0,
+            delay = 0,
+            trackIntro = false
+        } = options;
+
+        const startAt = this.ctx.currentTime + Math.max(0, delay);
+        const src = this.ctx.createBufferSource();
+        src.buffer = buffer;
+        src.playbackRate.setValueAtTime(rate, startAt);
+
+        const gain = this.ctx.createGain();
+        const safeOffset = Math.min(Math.max(0, offset), Math.max(0, buffer.duration - 0.05));
+        const naturalDur = Math.max(0.05, (buffer.duration - safeOffset) / Math.max(0.25, rate));
+        const playDur = maxDuration > 0 ? Math.min(naturalDur, maxDuration) : naturalDur;
+
+        gain.gain.setValueAtTime(volume, startAt);
+        if (maxDuration > 0 && naturalDur > maxDuration) {
+            const fadeStart = startAt + Math.max(0.04, playDur - 0.28);
+            gain.gain.setValueAtTime(volume, fadeStart);
+            gain.gain.exponentialRampToValueAtTime(0.001, startAt + playDur);
+        }
+
+        src.connect(gain);
+        gain.connect(this.sampleBus);
+        src.start(startAt, safeOffset);
+        src.stop(startAt + playDur + 0.03);
+
+        if (trackIntro) {
+            const entry = { src, gain };
+            this._activeIntroSources.push(entry);
+            src.onended = () => {
+                const idx = this._activeIntroSources.indexOf(entry);
+                if (idx !== -1) this._activeIntroSources.splice(idx, 1);
+            };
+        }
+
+        return true;
+    }
+
+    stopIntroCues() {
+        for (const timerId of this._introTimers) {
+            window.clearTimeout(timerId);
+        }
+        this._introTimers.length = 0;
+
+        if (!this.ctx) {
+            this._activeIntroSources.length = 0;
+            return;
+        }
+
+        const now = this.ctx.currentTime;
+        const active = [...this._activeIntroSources];
+        this._activeIntroSources.length = 0;
+
+        for (const item of active) {
+            try {
+                item.gain.gain.cancelScheduledValues(now);
+                item.gain.gain.setValueAtTime(Math.max(0.001, item.gain.gain.value), now);
+                item.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+                item.src.stop(now + 0.14);
+            } catch (_) {}
+        }
     }
 
     startAmbience(mode = 'menu') {
-        if (this.currentAmbienceMode === mode && this.ambientNodes) return;
-        this.stopAmbience();
-        this.currentAmbienceMode = mode;
+        const normalizedMode = AMBIENCE_PRESETS[mode] ? mode : 'menu';
+        if (this.currentAmbienceMode === normalizedMode && (this._activeStreams.length > 0 || this.ambientNodes)) {
+            this.syncVolumes();
+            return;
+        }
 
+        this.stopAmbience();
+        this.currentAmbienceMode = normalizedMode;
+
+        const preset = AMBIENCE_PRESETS[normalizedMode];
+        const musicEl = this.streamElements.get(preset.musicKey);
+        const rainEl = this.streamElements.get('amb_rain_night');
+
+        // 1. Usar pistas reales descargadas (música ambientada + lluvia nocturna)
+        if (musicEl) {
+            const settings = this.saveSystem.getSettings();
+            const master = settings.soundEnabled ? settings.masterVolume : 0;
+
+            this._activeStreams = [{ el: musicEl, scale: preset.musicScale }];
+            if (rainEl) {
+                this._activeStreams.push({ el: rainEl, scale: preset.rainScale });
+            }
+
+            for (const item of this._activeStreams) {
+                try {
+                    if (item.el === musicEl) {
+                        item.el.playbackRate = preset.rate || 1.0;
+                    }
+                    item.el.volume = Math.max(0, Math.min(1, master * settings.musicVolume * item.scale));
+                    if (settings.soundEnabled) {
+                        item.el.play().catch(() => {});
+                    }
+                } catch (_) {}
+            }
+            return;
+        }
+
+        // 2. Respaldo procedural Web Audio (entornos sin Audio HTML o mientras carga)
         if (!this._ensureContext() || this.ctx.state === 'suspended') return;
 
         const now = this.ctx.currentTime;
@@ -163,11 +454,11 @@ export class AudioManager {
 
         const rainFilter = this.ctx.createBiquadFilter();
         rainFilter.type = 'bandpass';
-        rainFilter.frequency.value = mode === 'intro' ? 680 : 950;
+        rainFilter.frequency.value = normalizedMode === 'intro' ? 680 : 950;
         rainFilter.Q.value = 0.65;
 
         const rainGain = this.ctx.createGain();
-        rainGain.gain.value = mode === 'menu' ? 0.22 : 0.12;
+        rainGain.gain.value = normalizedMode === 'menu' ? 0.22 : 0.12;
 
         rainSource.connect(rainFilter);
         rainFilter.connect(rainGain);
@@ -178,8 +469,8 @@ export class AudioManager {
         const osc2 = this.ctx.createOscillator();
         osc1.type = 'sawtooth';
         osc2.type = 'triangle';
-        osc1.frequency.value = mode === 'intro' ? 41.2 : 36.71;
-        osc2.frequency.value = mode === 'intro' ? 43.65 : 55.0;
+        osc1.frequency.value = normalizedMode === 'intro' ? 41.2 : 36.71;
+        osc2.frequency.value = normalizedMode === 'intro' ? 43.65 : 55.0;
 
         const droneFilter = this.ctx.createBiquadFilter();
         droneFilter.type = 'lowpass';
@@ -209,7 +500,7 @@ export class AudioManager {
             sources: [rainSource, osc1, osc2, lfo]
         };
 
-        const scale = mode === 'intro'
+        const scale = normalizedMode === 'intro'
             ? [164.81, 174.61, 196.0, 220.0, 146.83]
             : [146.83, 155.56, 174.61, 220.0, 130.81];
         let step = 0;
@@ -227,6 +518,16 @@ export class AudioManager {
             window.clearInterval(this.pulseTimer);
             this.pulseTimer = null;
         }
+
+        if (this._activeStreams.length > 0) {
+            for (const item of this._activeStreams) {
+                try {
+                    item.el.pause();
+                } catch (_) {}
+            }
+            this._activeStreams = [];
+        }
+
         if (this.ambientNodes && this.ctx) {
             const now = this.ctx.currentTime;
             const nodes = this.ambientNodes;
@@ -270,10 +571,12 @@ export class AudioManager {
         osc.stop(now + duration + 0.05);
     }
 
-    // --- Efectos de Interfaz y Ambiente ---
+    // --- Efectos de Interfaz, Clima e Introducción ---
 
     playHover() {
         if (!this._canPlaySfx()) return;
+        if (this._playSample('sfx_ui_click', { volume: 0.22, rate: 1.5, maxDuration: 0.09 })) return;
+
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -290,6 +593,8 @@ export class AudioManager {
 
     playClick() {
         if (!this._canPlaySfx()) return;
+        if (this._playSample('sfx_ui_click', { volume: 0.64, rate: 1.05, maxDuration: 0.22 })) return;
+
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -306,31 +611,20 @@ export class AudioManager {
 
     playConfirm() {
         if (!this._canPlaySfx()) return;
-        const now = this.ctx.currentTime;
+        this._playSample('sfx_ui_click', { volume: 0.72, rate: 0.84, maxDuration: 0.28 });
 
+        const now = this.ctx.currentTime;
         const sub = this.ctx.createOscillator();
         const subGain = this.ctx.createGain();
         sub.type = 'sine';
         sub.frequency.setValueAtTime(130, now);
         sub.frequency.exponentialRampToValueAtTime(34, now + 0.65);
-        subGain.gain.setValueAtTime(0.55, now);
+        subGain.gain.setValueAtTime(0.50, now);
         subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
         sub.connect(subGain);
         subGain.connect(this.sfxBus);
         sub.start(now);
         sub.stop(now + 0.72);
-
-        const metal = this.ctx.createOscillator();
-        const metalGain = this.ctx.createGain();
-        metal.type = 'sawtooth';
-        metal.frequency.setValueAtTime(520, now);
-        metal.frequency.exponentialRampToValueAtTime(155, now + 0.35);
-        metalGain.gain.setValueAtTime(0.22, now);
-        metalGain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
-        metal.connect(metalGain);
-        metalGain.connect(this.sfxBus);
-        metal.start(now);
-        metal.stop(now + 0.4);
     }
 
     playError() {
@@ -349,11 +643,14 @@ export class AudioManager {
         osc.stop(now + 0.24);
     }
 
-    playThunder() {
-        if (!this._canPlaySfx() || !this.noiseBuffer) return;
+    playThunder(trackIntro = false) {
+        if (!this._canPlaySfx()) return;
+        if (this._playSample('sfx_thunder', { volume: 0.82, rate: 0.96 + Math.random() * 0.08, maxDuration: 4.2, trackIntro })) {
+            return;
+        }
+        if (!this.noiseBuffer) return;
         const now = this.ctx.currentTime;
 
-        // Chasquido eléctrico inicial del relámpago
         if (this.whiteNoiseBuffer) {
             const crack = this.ctx.createBufferSource();
             crack.buffer = this.whiteNoiseBuffer;
@@ -404,12 +701,86 @@ export class AudioManager {
         osc.stop(now + 0.028);
     }
 
+    /**
+     * Reproduce la ambientación sonora específica de cada una de las 6 páginas de cómic
+     * de la Introducción protagonizada por EDI, deteniendo primero cualquier efecto previo.
+     */
+    playIntroSceneCue(cueKey) {
+        this.stopIntroCues();
+        if (!this._canPlaySfx()) return;
+
+        const schedule = (delayMs, fn) => {
+            const id = window.setTimeout(fn, delayMs);
+            this._introTimers.push(id);
+        };
+
+        switch (cueKey) {
+            case 'call': {
+                // Escena 1: Llamada entrante de domicilios + arranque de la motocicleta de EDI
+                const playedRing = this._playSample('sfx_phone_ring', { volume: 0.84, maxDuration: 2.8, trackIntro: true });
+                if (!playedRing) this.playIntroChapterCue(1);
+                schedule(1250, () => {
+                    this._playSample('sfx_motorcycle', { volume: 0.72, rate: 1.0, maxDuration: 3.1, trackIntro: true });
+                });
+                break;
+            }
+            case 'lab': {
+                // Escena 2: Monitor del Hospital General e indicaciones urgentes del paquete
+                const playedBeep = this._playSample('sfx_hospital_beep', { volume: 0.72, rate: 1.0, maxDuration: 2.2, trackIntro: true });
+                if (!playedBeep) this.playIntroChapterCue(2);
+                schedule(680, () => {
+                    this._playSample('sfx_hospital_beep', { volume: 0.56, rate: 1.18, maxDuration: 1.5, trackIntro: true });
+                });
+                break;
+            }
+            case 'road': {
+                // Escena 3: La moto se queda sin gasolina + el automóvil pasa a toda velocidad
+                this._playSample('sfx_motorcycle', { volume: 0.76, rate: 0.80, maxDuration: 2.3, trackIntro: true });
+                schedule(820, () => {
+                    const playedCar = this._playSample('sfx_car_pass', { volume: 0.88, rate: 1.0, maxDuration: 3.2, trackIntro: true });
+                    if (!playedCar) this.playIntroChapterCue(3);
+                });
+                break;
+            }
+            case 'crash': {
+                // Escena 4: Accidente violento del vehículo en la carretera + trueno nocturno
+                const playedCrash = this._playSample('sfx_car_crash', { volume: 0.92, rate: 0.96, maxDuration: 2.5, trackIntro: true });
+                if (!playedCrash) this.playExplosion();
+                schedule(320, () => {
+                    this.playThunder(true);
+                });
+                break;
+            }
+            case 'shot': {
+                // Escena 5: Los muertos se levantan entre los restos + disparo de emergencia
+                this._playSample('sfx_zombie_groan', { volume: 0.86, rate: 0.95, maxDuration: 2.6, trackIntro: true });
+                schedule(620, () => {
+                    const shotPlayed = this._playSample('sfx_pistol', { volume: 0.88, rate: 1.0, maxDuration: 1.6, trackIntro: true });
+                    if (!shotPlayed) this.playShoot('pistol_9mm');
+                });
+                break;
+            }
+            case 'outbreak': {
+                // Escena 6: Sirena de emergencia en la ciudad + rugido de la infección expandiéndose
+                const sirenPlayed = this._playSample('sfx_siren', { volume: 0.74, rate: 1.0, maxDuration: 3.8, trackIntro: true });
+                if (!sirenPlayed) this.playIntroChapterCue(6);
+                schedule(480, () => {
+                    this._playSample('sfx_zombie_roar', { volume: 0.84, rate: 0.90, maxDuration: 3.0, trackIntro: true });
+                });
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
     playIntroChapterCue(chapterIndex) {
         if (!this._canPlaySfx()) return;
         const now = this.ctx.currentTime;
         switch (chapterIndex) {
             case 0:
             case 1: {
+                if (this._playSample('sfx_phone_ring', { volume: 0.8, maxDuration: 2.4, trackIntro: true })) return;
                 const osc = this.ctx.createOscillator();
                 const gain = this.ctx.createGain();
                 osc.type = 'sine';
@@ -424,6 +795,7 @@ export class AudioManager {
                 break;
             }
             case 2: {
+                if (this._playSample('sfx_hospital_beep', { volume: 0.72, maxDuration: 2.0, trackIntro: true })) return;
                 for (let i = 0; i < 2; i++) {
                     const start = now + i * 0.42;
                     const alarm = this.ctx.createOscillator();
@@ -441,11 +813,16 @@ export class AudioManager {
                 break;
             }
             case 3:
+                if (!this._playSample('sfx_car_pass', { volume: 0.85, maxDuration: 2.8, trackIntro: true })) {
+                    this.playThunder(true);
+                }
+                break;
             case 5:
-                this.playThunder();
+                this.playThunder(true);
                 break;
             case 4:
             case 6: {
+                if (this._playSample('sfx_siren', { volume: 0.72, maxDuration: 3.2, trackIntro: true })) return;
                 for (let beat = 0; beat < 2; beat++) {
                     const t = now + beat * 0.24;
                     const thump = this.ctx.createOscillator();
@@ -467,13 +844,14 @@ export class AudioManager {
         }
     }
 
-    // --- Efectos de Combate Duros y Realistas (Balística Multicapa) ---
+    // --- Efectos de Combate, Armas y Zombis ---
 
     playShoot(weaponId = 'pistol_9mm') {
-        if (!this._canPlaySfx() || !this.whiteNoiseBuffer) return;
+        if (!this._canPlaySfx()) return;
         const now = this.ctx.currentTime;
 
         if (weaponId === 'flamethrower_bio') {
+            if (!this.whiteNoiseBuffer) return;
             const jet = this.ctx.createBufferSource();
             jet.buffer = this.noiseBuffer || this.whiteNoiseBuffer;
             const flt = this.ctx.createBiquadFilter();
@@ -493,8 +871,26 @@ export class AudioManager {
 
         const isShotgun = weaponId === 'shotgun_combat';
         const isHeavy = isShotgun || weaponId === 'revolver_magnum' || weaponId === 'rifle_bio';
+        const jitter = 0.96 + Math.random() * 0.08;
 
-        // Capa 1: Crack supersónico de pólvora (ruido blanco de alta energía)
+        let playedSample = false;
+        if (isShotgun) {
+            playedSample = this._playSample('sfx_shotgun', { volume: 0.96, rate: jitter, maxDuration: 1.4 });
+        } else if (isHeavy) {
+            playedSample = this._playSample('sfx_pistol', { volume: 0.92, rate: 0.82 * jitter, maxDuration: 1.3 });
+            this._playSample('sfx_shotgun', { volume: 0.45, rate: 1.15, maxDuration: 0.9 });
+        } else {
+            playedSample = this._playSample('sfx_pistol', { volume: 0.86, rate: jitter, maxDuration: 1.1 });
+        }
+
+        if (playedSample) {
+            this.playShellCasing(0.16 + Math.random() * 0.08);
+            return;
+        }
+
+        if (!this.whiteNoiseBuffer) return;
+
+        // Respaldo balístico procedural
         const crack = this.ctx.createBufferSource();
         crack.buffer = this.whiteNoiseBuffer;
         const hp = this.ctx.createBiquadFilter();
@@ -513,7 +909,6 @@ export class AudioManager {
         crack.start(now);
         crack.stop(now + dur + 0.02);
 
-        // Capa 2: Cuerpo de presión sub-grave en el pecho (golpe seco de recámara)
         const sub = this.ctx.createOscillator();
         const subGain = this.ctx.createGain();
         sub.type = isHeavy ? 'sawtooth' : 'triangle';
@@ -525,19 +920,6 @@ export class AudioManager {
         subGain.connect(this.sfxBus);
         sub.start(now);
         sub.stop(now + 0.22);
-
-        // Capa 3: Retroceso mecánico de corredera metálica + caída de casquillo de latón
-        const slide = this.ctx.createOscillator();
-        const slideGain = this.ctx.createGain();
-        slide.type = 'square';
-        slide.frequency.setValueAtTime(1480, now + 0.025);
-        slide.frequency.exponentialRampToValueAtTime(520, now + 0.065);
-        slideGain.gain.setValueAtTime(0.18, now + 0.025);
-        slideGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-        slide.connect(slideGain);
-        slideGain.connect(this.sfxBus);
-        slide.start(now + 0.025);
-        slide.stop(now + 0.075);
 
         this.playShellCasing(0.16 + Math.random() * 0.08);
     }
@@ -561,10 +943,14 @@ export class AudioManager {
 
     playMelee(weaponId = 'flashlight_melee') {
         if (!this._canPlaySfx()) return;
-        const now = this.ctx.currentTime;
         const isBlade = weaponId === 'machete_combat';
+        const rate = (isBlade ? 1.02 : 0.84) + (Math.random() * 0.08 - 0.04);
 
-        // Silbido cortante del aire
+        if (this._playSample('sfx_melee', { volume: 0.86, rate, maxDuration: 0.65 })) {
+            return;
+        }
+
+        const now = this.ctx.currentTime;
         if (this.whiteNoiseBuffer) {
             const whoosh = this.ctx.createBufferSource();
             whoosh.buffer = this.whiteNoiseBuffer;
@@ -598,13 +984,14 @@ export class AudioManager {
 
     playEmptyClip() {
         if (!this._canPlaySfx()) return;
+        this._playSample('sfx_ui_click', { volume: 0.55, rate: 1.35, maxDuration: 0.12 });
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'square';
         osc.frequency.setValueAtTime(1180, now);
         osc.frequency.setValueAtTime(720, now + 0.025);
-        gain.gain.setValueAtTime(0.24, now);
+        gain.gain.setValueAtTime(0.20, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
         osc.connect(gain);
         gain.connect(this.sfxBus);
@@ -614,6 +1001,9 @@ export class AudioManager {
 
     playReload() {
         if (!this._canPlaySfx()) return;
+        if (this._playSample('sfx_reload', { volume: 0.86, rate: 0.98 + Math.random() * 0.05, maxDuration: 1.5 })) {
+            return;
+        }
         const now = this.ctx.currentTime;
         [0, 0.15, 0.32].forEach((offset, idx) => {
             const osc = this.ctx.createOscillator();
@@ -684,36 +1074,32 @@ export class AudioManager {
         src.stop(now + 0.24);
     }
 
+    playZombieGroan(volume = 0.60) {
+        if (!this._canPlaySfx()) return;
+        const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        if (nowMs - this._lastGroanAt < 1400) return;
+        this._lastGroanAt = nowMs;
+
+        const rate = 0.88 + Math.random() * 0.24;
+        this._playSample('sfx_zombie_groan', { volume, rate, maxDuration: 2.3 });
+    }
+
     playHurt() {
         if (!this._canPlaySfx()) return;
+        this._playSample('sfx_zombie_hit', { volume: 0.86, rate: 0.78, maxDuration: 0.7 });
+
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(220, now);
         osc.frequency.exponentialRampToValueAtTime(48, now + 0.24);
-        gain.gain.setValueAtTime(0.56, now);
+        gain.gain.setValueAtTime(0.42, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
         osc.connect(gain);
         gain.connect(this.sfxBus);
         osc.start(now);
         osc.stop(now + 0.27);
-
-        if (this.whiteNoiseBuffer) {
-            const smack = this.ctx.createBufferSource();
-            smack.buffer = this.whiteNoiseBuffer;
-            const bp = this.ctx.createBiquadFilter();
-            bp.type = 'bandpass';
-            bp.frequency.setValueAtTime(980, now);
-            const sg = this.ctx.createGain();
-            sg.gain.setValueAtTime(0.45, now);
-            sg.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
-            smack.connect(bp);
-            bp.connect(sg);
-            sg.connect(this.sfxBus);
-            smack.start(now);
-            smack.stop(now + 0.12);
-        }
     }
 
     playEnemyHit(armored = false) {
@@ -734,7 +1120,10 @@ export class AudioManager {
             clang.stop(now + 0.11);
         }
 
-        // Impacto carnal húmedo + golpe óseo grave
+        if (this._playSample('sfx_zombie_hit', { volume: 0.76, rate: 0.92 + Math.random() * 0.18, maxDuration: 0.55 })) {
+            return;
+        }
+
         const thud = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         thud.type = 'triangle';
@@ -746,29 +1135,15 @@ export class AudioManager {
         gain.connect(this.sfxBus);
         thud.start(now);
         thud.stop(now + 0.13);
-
-        if (this.whiteNoiseBuffer) {
-            const splat = this.ctx.createBufferSource();
-            splat.buffer = this.whiteNoiseBuffer;
-            const bp = this.ctx.createBiquadFilter();
-            bp.type = 'bandpass';
-            bp.frequency.setValueAtTime(1150, now);
-            bp.Q.value = 1.1;
-            const sg = this.ctx.createGain();
-            sg.gain.setValueAtTime(0.36, now);
-            sg.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
-            splat.connect(bp);
-            bp.connect(sg);
-            sg.connect(this.sfxBus);
-            splat.start(now);
-            splat.stop(now + 0.09);
-        }
     }
 
     playEnemyDeath() {
         if (!this._canPlaySfx()) return;
-        const now = this.ctx.currentTime;
+        if (this._playSample('sfx_zombie_death', { volume: 0.85, rate: 0.90 + Math.random() * 0.18, maxDuration: 1.8 })) {
+            return;
+        }
 
+        const now = this.ctx.currentTime;
         const groan = this.ctx.createOscillator();
         const groan2 = this.ctx.createOscillator();
         const filter = this.ctx.createBiquadFilter();
@@ -799,23 +1174,22 @@ export class AudioManager {
 
     playExplosion() {
         if (!this._canPlaySfx()) return;
-        const now = this.ctx.currentTime;
+        const samplePlayed = this._playSample('sfx_explosion', { volume: 0.96, rate: 0.94 + Math.random() * 0.10, maxDuration: 2.8 });
 
-        // Onda de choque sub-baja masiva
+        const now = this.ctx.currentTime;
         const boom = this.ctx.createOscillator();
         const bGain = this.ctx.createGain();
         boom.type = 'sine';
         boom.frequency.setValueAtTime(140, now);
         boom.frequency.exponentialRampToValueAtTime(22, now + 0.72);
-        bGain.gain.setValueAtTime(0.95, now);
+        bGain.gain.setValueAtTime(samplePlayed ? 0.55 : 0.95, now);
         bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
         boom.connect(bGain);
         bGain.connect(this.sfxBus);
         boom.start(now);
         boom.stop(now + 0.78);
 
-        // Detonación pirotécnica rasgada
-        if (this.whiteNoiseBuffer) {
+        if (!samplePlayed && this.whiteNoiseBuffer) {
             const blast = this.ctx.createBufferSource();
             blast.buffer = this.whiteNoiseBuffer;
             const lp = this.ctx.createBiquadFilter();
@@ -835,6 +1209,9 @@ export class AudioManager {
 
     playPickup() {
         if (!this._canPlaySfx()) return;
+        if (this._playSample('sfx_pickup', { volume: 0.78, rate: 1.0 + Math.random() * 0.08, maxDuration: 0.9 })) {
+            return;
+        }
         const now = this.ctx.currentTime;
         [440, 587.33, 880].forEach((freq, i) => {
             const t = now + i * 0.075;
@@ -853,6 +1230,7 @@ export class AudioManager {
 
     playExtraLife() {
         if (!this._canPlaySfx()) return;
+        this._playSample('sfx_victory', { volume: 0.70, rate: 1.18, maxDuration: 1.4 });
         const now = this.ctx.currentTime;
         [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
             const t = now + i * 0.085;
@@ -860,7 +1238,7 @@ export class AudioManager {
             const gain = this.ctx.createGain();
             osc.type = 'triangle';
             osc.frequency.setValueAtTime(freq, t);
-            gain.gain.setValueAtTime(0.32, t);
+            gain.gain.setValueAtTime(0.26, t);
             gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
             osc.connect(gain);
             gain.connect(this.sfxBus);
@@ -871,6 +1249,7 @@ export class AudioManager {
 
     playCheckpointRespawn() {
         if (!this._canPlaySfx()) return;
+        this._playSample('sfx_heal', { volume: 0.74, rate: 1.08, maxDuration: 1.2 });
         const now = this.ctx.currentTime;
         [261.63, 392.0, 523.25].forEach((freq, i) => {
             const t = now + i * 0.09;
@@ -878,7 +1257,7 @@ export class AudioManager {
             const g = this.ctx.createGain();
             osc.type = 'sine';
             osc.frequency.setValueAtTime(freq, t);
-            g.gain.setValueAtTime(0.28, t);
+            g.gain.setValueAtTime(0.24, t);
             g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
             osc.connect(g);
             g.connect(this.sfxBus);
@@ -889,6 +1268,9 @@ export class AudioManager {
 
     playHeal() {
         if (!this._canPlaySfx()) return;
+        if (this._playSample('sfx_heal', { volume: 0.82, rate: 1.0, maxDuration: 1.3 })) {
+            return;
+        }
         const now = this.ctx.currentTime;
         [392, 523.25].forEach((freq, i) => {
             const t = now + i * 0.1;
@@ -907,6 +1289,10 @@ export class AudioManager {
 
     playBossRoar() {
         if (!this._canPlaySfx()) return;
+        if (this._playSample('sfx_zombie_roar', { volume: 0.96, rate: 0.82, maxDuration: 3.2 })) {
+            return;
+        }
+
         const now = this.ctx.currentTime;
         const osc1 = this.ctx.createOscillator();
         const osc2 = this.ctx.createOscillator();
@@ -944,6 +1330,9 @@ export class AudioManager {
 
     playVictory() {
         if (!this._canPlaySfx()) return;
+        if (this._playSample('sfx_victory', { volume: 0.92, rate: 1.0, maxDuration: 3.6 })) {
+            return;
+        }
         const now = this.ctx.currentTime;
         [293.66, 369.99, 440, 587.33].forEach((freq, idx) => {
             const t = now + idx * 0.13;
@@ -962,6 +1351,9 @@ export class AudioManager {
 
     playGameOver() {
         if (!this._canPlaySfx()) return;
+        if (this._playSample('sfx_gameover', { volume: 0.88, rate: 0.92, maxDuration: 4.5 })) {
+            return;
+        }
         const now = this.ctx.currentTime;
         [220, 196, 164.81, 123.47].forEach((freq, idx) => {
             const t = now + idx * 0.22;
@@ -981,37 +1373,17 @@ export class AudioManager {
     playZombieTransformation() {
         if (!this._canPlaySfx()) return;
         this.playGameOver();
-        const now = this.ctx.currentTime + 0.35;
-        const osc1 = this.ctx.createOscillator();
-        const osc2 = this.ctx.createOscillator();
-        const flt = this.ctx.createBiquadFilter();
-        const g = this.ctx.createGain();
-        osc1.type = 'sawtooth';
-        osc2.type = 'square';
-        osc1.frequency.setValueAtTime(112, now);
-        osc1.frequency.exponentialRampToValueAtTime(36, now + 1.25);
-        osc2.frequency.setValueAtTime(79, now);
-        osc2.frequency.exponentialRampToValueAtTime(27, now + 1.25);
-        flt.type = 'lowpass';
-        flt.frequency.setValueAtTime(520, now);
-        g.gain.setValueAtTime(0.01, now);
-        g.gain.linearRampToValueAtTime(0.62, now + 0.18);
-        g.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
-        osc1.connect(flt);
-        osc2.connect(flt);
-        flt.connect(g);
-        g.connect(this.sfxBus);
-        osc1.start(now);
-        osc2.start(now);
-        osc1.stop(now + 1.35);
-        osc2.stop(now + 1.35);
+        this._playSample('sfx_zombie_roar', { volume: 0.85, rate: 0.84, delay: 0.35, maxDuration: 2.8 });
     }
 
     /**
-     * Cuerno grave de alarma para el evento de horda y la alerta previa al Jefe.
+     * Alarma de emergencia y rugido para el evento de horda y la alerta previa al Jefe.
      */
     playHordeHorn() {
         if (!this._canPlaySfx()) return;
+        const sirenOk = this._playSample('sfx_siren', { volume: 0.80, rate: 0.96, maxDuration: 3.4 });
+        this._playSample('sfx_zombie_roar', { volume: 0.78, rate: 0.88, delay: 0.28, maxDuration: 2.6 });
+        if (sirenOk) return;
 
         const now = this.ctx.currentTime;
         const gain = this.ctx.createGain();

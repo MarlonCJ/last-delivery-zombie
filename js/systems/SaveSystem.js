@@ -10,6 +10,9 @@ const CURRENT_VERSION = '1.2.0';
 // Cada 10,000 puntos acumulados se otorga +1 vida extra.
 export const LIFE_SCORE_INTERVAL = 10000;
 
+// Nombre fijo del protagonista: el repartidor se llama EDI.
+export const PLAYER_NAME = 'EDI';
+
 export const DEFAULT_CONTROLS = Object.freeze({
     moveLeft: ['KeyA', 'ArrowLeft'],
     moveRight: ['KeyD', 'ArrowRight'],
@@ -26,7 +29,7 @@ function createDefaultState() {
         version: CURRENT_VERSION,
         updatedAt: new Date().toISOString(),
         player: {
-            name: '',
+            name: PLAYER_NAME,
             currentLevel: 1,
             completedLevels: [],
             introSeen: false,
@@ -153,9 +156,8 @@ export class SaveSystem {
             version: CURRENT_VERSION,
             updatedAt: saved.updatedAt || defaults.updatedAt,
             player: {
-                name: typeof saved.player?.name === 'string'
-                    ? saved.player.name.trim().slice(0, 20)
-                    : defaults.player.name,
+                // El nombre ya no es editable: todo perfil guardado pasa a llamarse EDI.
+                name: PLAYER_NAME,
                 currentLevel: Number.isInteger(saved.player?.currentLevel) && saved.player.currentLevel >= 1
                     ? saved.player.currentLevel
                     : defaults.player.currentLevel,
@@ -273,14 +275,14 @@ export class SaveSystem {
     // --- Accesores de Jugador ---
 
     getPlayerName() {
-        return this.state.player.name;
+        return PLAYER_NAME;
     }
 
-    setPlayerName(name) {
-        const clean = String(name ?? '').trim().replace(/\s+/g, ' ').slice(0, 20);
-        this.state.player.name = clean;
+    /** El nombre del protagonista es fijo (EDI); se conserva por compatibilidad. */
+    setPlayerName() {
+        this.state.player.name = PLAYER_NAME;
         this.save();
-        return clean;
+        return PLAYER_NAME;
     }
 
     markIntroSeen(seen = true) {

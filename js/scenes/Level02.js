@@ -124,13 +124,19 @@ export class Level02 {
         this.btnPauseRestart = document.getElementById('btn-pause-restart');
         this.btnPauseMenu = document.getElementById('btn-pause-menu');
 
+        this.hudTimerBox = document.getElementById('hud-timer-box');
         this.victoryPanel = document.getElementById('level-victory-panel');
         this.victoryMissionTitle = document.getElementById('victory-mission-title');
         this.resScore = document.getElementById('res-score');
+        this.resTotalScore = document.getElementById('res-total-score');
         this.resZombies = document.getElementById('res-zombies');
+        this.resHealth = document.getElementById('res-health');
         this.resCombatMoney = document.getElementById('res-combat-money');
         this.resLevelReward = document.getElementById('res-level-reward');
         this.resTime = document.getElementById('res-time');
+        this.victorySaveFeedback = document.getElementById('victory-save-feedback');
+        this.btnVictorySave = document.getElementById('btn-victory-save');
+        this.btnVictoryMenu = document.getElementById('btn-victory-menu');
         this.btnVictoryShop = document.getElementById('btn-victory-shop');
         this.btnVictoryContinue = document.getElementById('btn-victory-continue');
     }
@@ -175,6 +181,24 @@ export class Level02 {
             if (!this.isSceneActive) return;
             this.engine.audio.playClick();
             this._setPaused(false);
+            this.engine.sceneManager.transitionTo('mainMenu', {}, 0.45);
+        });
+
+        this.btnVictorySave?.addEventListener('click', () => {
+            if (!this.isSceneActive) return;
+            this.engine.saveSystem.save();
+            this.engine.audio.playConfirm();
+            if (this.victorySaveFeedback) {
+                this.victorySaveFeedback.textContent = '✓ Progreso de EDI guardado correctamente en memoria local.';
+                this.victorySaveFeedback.classList.add('is-saved');
+            }
+        });
+
+        this.btnVictoryMenu?.addEventListener('click', () => {
+            if (!this.isSceneActive) return;
+            this.engine.saveSystem.save();
+            this.engine.audio.playClick();
+            this.victoryPanel?.classList.add('hidden');
             this.engine.sceneManager.transitionTo('mainMenu', {}, 0.45);
         });
 
@@ -310,7 +334,8 @@ export class Level02 {
         this.victoryPanel?.classList.add('hidden');
 
         this._syncHud();
-        this.engine.audio.startAmbience('intro');
+        this._zombieGroanTimer = 2.6;
+        this.engine.audio.startAmbience('gameplay');
     }
 
     exit() {
@@ -725,6 +750,16 @@ export class Level02 {
         // Evento de horda: repone zombis y avanza hacia la alerta del Jefe Final
         this.horde?.update(dt, this.player);
 
+        // Gruñidos ambientales cuando hay zombis cercanos a EDI
+        this._zombieGroanTimer = (this._zombieGroanTimer ?? 4.0) - dt;
+        if (this._zombieGroanTimer <= 0) {
+            const hasNearbyZombie = this.enemies.some(e => !e.dead && Math.abs(e.x - this.player.x) < 520);
+            if (hasNearbyZombie) {
+                this.engine.audio.playZombieGroan?.(0.56);
+            }
+            this._zombieGroanTimer = 4.6 + Math.random() * 3.0;
+        }
+
         this.camera.follow(this.player, dt);
         this._syncHud();
     }
@@ -911,8 +946,10 @@ export class Level02 {
         this.engine.audio.playVictory();
         this.portrait?.notify('laugh', 5000);
 
-        if (this.resScore) this.resScore.textContent = `${this.scoreEarnedInRun} PTS`;
+        if (this.resScore) this.resScore.textContent = `+${this.scoreEarnedInRun} PTS`;
+        if (this.resTotalScore) this.resTotalScore.textContent = `${this.engine.economy.getScore()} PTS`;
         if (this.resZombies) this.resZombies.textContent = String(this.zombiesKilled);
+        if (this.resHealth && this.player) this.resHealth.textContent = `${this.player.health} / ${this.player.maxHealth} HP`;
         if (this.resCombatMoney) this.resCombatMoney.textContent = `$${this.moneyEarnedInRun}`;
         if (this.resLevelReward) this.resLevelReward.textContent = `+$${levelInfo.baseMoneyReward}`;
         if (this.resTime) this.resTime.textContent = this._formatTime(this.elapsedTime);
@@ -948,7 +985,7 @@ export class Level02 {
     }
 
     _syncHud() {
-        const playerName = this.engine.saveSystem.getPlayerName() || 'Repartidor';
+        const playerName = this.engine.saveSystem.getPlayerName() || 'EDI';
         if (this.hudPlayerName) this.hudPlayerName.textContent = playerName;
 
         const lives = this.engine.saveSystem.getLives();

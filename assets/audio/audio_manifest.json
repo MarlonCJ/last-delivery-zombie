@@ -1,0 +1,177 @@
+{
+  "music_menu": {
+    "file": "assets/audio/music_menu.mp3",
+    "bytes": 3291913,
+    "source": "InternetArchive (scary-horror-music/Don't go in! (v.1.2)/Music/Ambient horror track.mp3)",
+    "sourceUrl": "https://archive.org/download/scary-horror-music/Don't%20go%20in!%20(v.1.2)/Music/Ambient%20horror%20track.mp3",
+    "description": "Música oscura de menú principal (Survival Horror)"
+  },
+  "music_intro": {
+    "file": "assets/audio/music_intro.mp3",
+    "bytes": 4162500,
+    "source": "InternetArchive (scary-horror-music/Don't go in! (v.1.2)/Music/Scary horror music!!.mp3)",
+    "sourceUrl": "https://archive.org/download/scary-horror-music/Don't%20go%20in!%20(v.1.2)/Music/Scary%20horror%20music!!.mp3",
+    "description": "Música cinematográfica de suspenso para las 6 escenas de Introducción"
+  },
+  "music_gameplay": {
+    "file": "assets/audio/music_gameplay.mp3",
+    "bytes": 3085903,
+    "source": "InternetArchive (Right Behind You - Kevin MacLeod)",
+    "sourceUrl": "https://archive.org/download/scary-horror-music/Don't%20go%20in!%20(v.1.2)/Music/Right%20Behind%20You%20Royalty%20Free%3B%20audio%20by%20Kevin%20MacLeod.mp3",
+    "description": "Música tensa de persecución y combate contra zombis en juego"
+  },
+  "amb_rain_night": {
+    "file": "assets/audio/amb_rain_night.ogg",
+    "bytes": 226945,
+    "source": "WikimediaCommons (Rain and thunder.ogg)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/4/42/Rain_and_thunder.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Ambiente nocturno de lluvia sobre el asfalto"
+  },
+  "sfx_phone_ring": {
+    "file": "assets/audio/sfx_phone_ring.mp3",
+    "bytes": 33280,
+    "source": "InternetArchive (Phone_Ring/110306_2010a.mp3)",
+    "sourceUrl": "https://archive.org/download/Phone_Ring/110306_2010a.mp3",
+    "description": "Timbre de llamada entrante al teléfono de EDI (Escena 1)"
+  },
+  "sfx_motorcycle": {
+    "file": "assets/audio/sfx_motorcycle.ogg",
+    "bytes": 97982,
+    "source": "WikimediaCommons (Motorbike 1.ogg)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/4/48/Motorbike_1.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Motor de la motocicleta de reparto de EDI (Escenas 1 y 3)"
+  },
+  "sfx_hospital_beep": {
+    "file": "assets/audio/sfx_hospital_beep.ogg",
+    "bytes": 15336,
+    "source": "WikimediaCommons (Beep example.ogg)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/f/f9/Beep_example.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Monitor e indicaciones urgentes en el Hospital General (Escena 2)"
+  },
+  "sfx_car_pass": {
+    "file": "assets/audio/sfx_car_pass.ogg",
+    "bytes": 18267,
+    "source": "WikimediaCommons (Speeding-car-horn doppler effect sample.ogg)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/9/90/Speeding-car-horn_doppler_effect_sample.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Automóvil pasando a toda velocidad en la carretera (Escena 3)"
+  },
+  "sfx_car_crash": {
+    "file": "assets/audio/sfx_car_crash.wav",
+    "bytes": 84736,
+    "source": "InternetArchive (scary-horror-music/shatter.wav)",
+    "sourceUrl": "https://archive.org/download/scary-horror-music/Don't%20go%20in!%20(v.1.2)/Sound/shatter.wav",
+    "description": "Estallido de cristales y choque del automóvil en la carretera (Escena 4)"
+  },
+  "sfx_thunder": {
+    "file": "assets/audio/sfx_thunder.ogg",
+    "bytes": 411421,
+    "source": "WikimediaCommons (Thunder 01.ogg)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/f/fa/Thunder_01.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Trueno nocturno en portada e introducción (Escena 4)"
+  },
+  "sfx_siren": {
+    "file": "assets/audio/sfx_siren.ogg",
+    "bytes": 61818,
+    "source": "WikimediaCommons (Siren.ogg)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/9/97/Siren.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Sirena de emergencia mientras la infección se expande (Escena 6 y Horda)"
+  },
+  "sfx_pistol": {
+    "file": "assets/audio/sfx_pistol.wav",
+    "bytes": 307300,
+    "source": "WikimediaCommons (9 mm gunshot-mike-koenig-123.wav)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/0/05/9_mm_gunshot-mike-koenig-123.wav?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Disparo de pistola 9mm (Escena 5 y Combate)"
+  },
+  "sfx_shotgun": {
+    "file": "assets/audio/sfx_shotgun.ogg",
+    "bytes": 16013,
+    "source": "InternetArchive (ShotgunSoundEffect/Shotgun+2.ogg)",
+    "sourceUrl": "https://archive.org/download/ShotgunSoundEffect/Shotgun%2B2.ogg",
+    "description": "Disparo potente de escopeta / arma pesada"
+  },
+  "sfx_reload": {
+    "file": "assets/audio/sfx_reload.mp3",
+    "bytes": 27681,
+    "source": "InternetArchive (motion-effects-library-gun-reload-1/Motion_Effects_library_Gun_reload_1.mp3)",
+    "sourceUrl": "https://archive.org/download/motion-effects-library-gun-reload-1/Motion_Effects_library_Gun_reload_1.mp3",
+    "description": "Recarga mecánica de cargador y corredera"
+  },
+  "sfx_melee": {
+    "file": "assets/audio/sfx_melee.mp3",
+    "bytes": 15433,
+    "source": "WikimediaCommons (Sword 1 (Gravity Sound).mp3)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/b/bd/Sword_1_%28Gravity_Sound%29.mp3?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Corte de machete / golpe cuerpo a cuerpo"
+  },
+  "sfx_zombie_groan": {
+    "file": "assets/audio/sfx_zombie_groan.mp3",
+    "bytes": 106160,
+    "source": "InternetArchive (zombie_moan/zombie_moan.mp3)",
+    "sourceUrl": "https://archive.org/download/zombie_moan/zombie_moan.mp3",
+    "description": "Gruñido real de zombi hambriento (Escena 5 y Combate)"
+  },
+  "sfx_zombie_death": {
+    "file": "assets/audio/sfx_zombie_death.wav",
+    "bytes": 24162,
+    "source": "InternetArchive (scary-horror-music/monstergrunz.wav)",
+    "sourceUrl": "https://archive.org/download/scary-horror-music/Don't%20go%20in!%20(v.1.2)/Sound/monstergrunz.wav",
+    "description": "Gruñido agónico al eliminar un zombi"
+  },
+  "sfx_zombie_roar": {
+    "file": "assets/audio/sfx_zombie_roar.ogg",
+    "bytes": 94500,
+    "source": "WikimediaCommons (Varecia roar-shriek chorus1.ogg)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/7/7d/Varecia_roar-shriek_chorus1.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Rugido de horda / jefe mutante (Escena 6 y Jefe)"
+  },
+  "sfx_zombie_hit": {
+    "file": "assets/audio/sfx_zombie_hit.mp3",
+    "bytes": 51546,
+    "source": "InternetArchive (DragonBallZHeavyPunchSoundEffect/Dragon Ball Z Heavy Punch sound effect.mp3)",
+    "sourceUrl": "https://archive.org/download/DragonBallZHeavyPunchSoundEffect/Dragon%20Ball%20Z%20Heavy%20Punch%20sound%20effect.mp3",
+    "description": "Impacto contundente de golpe/disparo sobre zombi"
+  },
+  "sfx_explosion": {
+    "file": "assets/audio/sfx_explosion.ogg",
+    "bytes": 24083,
+    "source": "WikimediaCommons (Explosion 10.ogg)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/3/37/Explosion_10.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Explosión contundente"
+  },
+  "sfx_pickup": {
+    "file": "assets/audio/sfx_pickup.ogg",
+    "bytes": 42577,
+    "source": "WikimediaCommons (Coin dropped on wooden floor.ogg)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/c/c5/Coin_dropped_on_wooden_floor.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Recoger munición, suministros o dinero"
+  },
+  "sfx_heal": {
+    "file": "assets/audio/sfx_heal.ogg",
+    "bytes": 10613,
+    "source": "WikimediaCommons (Double stop glissando cello high pitched sample.ogg)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/1/19/Double_stop_glissando_cello_high_pitched_sample.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Curación con botiquín"
+  },
+  "sfx_victory": {
+    "file": "assets/audio/sfx_victory.mp3",
+    "bytes": 136182,
+    "source": "InternetArchive (fanfare-victory-sound-effect-hd/Bell Transition - Sound Effect [HD].mp3)",
+    "sourceUrl": "https://archive.org/download/fanfare-victory-sound-effect-hd/Bell%20Transition%20-%20Sound%20Effect%20%5BHD%5D.mp3",
+    "description": "Fanfarria de Nivel Completado"
+  },
+  "sfx_gameover": {
+    "file": "assets/audio/sfx_gameover.ogg",
+    "bytes": 195366,
+    "source": "WikimediaCommons (Bytom Margaret church John of Nepomuk bell ringing.ogg)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Bytom_Margaret_church_John_of_Nepomuk_bell_ringing.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Estinger sombrío de Game Over"
+  },
+  "sfx_ui_click": {
+    "file": "assets/audio/sfx_ui_click.wav",
+    "bytes": 100516,
+    "source": "WikimediaCommons (Computer Mouse Click.wav)",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/a/ac/Computer_Mouse_Click.wav?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "description": "Clic táctico de botones de menú e interfaz"
+  }
+}

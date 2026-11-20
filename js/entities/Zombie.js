@@ -218,7 +218,9 @@ export class Zombie extends Enemy {
         this.animPrefix = preset.animPrefix;
         this.fallbackPrefix = preset.fallbackPrefix;
         this.visualHeight = config.visualHeight || preset.visualHeight || 116;
-        this.shambleCadence = canonical !== 'runner' && canonical !== 'leaper';
+        this.shambleCadence = config.shambleCadence !== undefined
+            ? Boolean(config.shambleCadence)
+            : (canonical !== 'runner' && canonical !== 'leaper');
         this.spriteAtlas = config.spriteAtlas || null;
 
         this.isBomber = canonical === 'bomber';
@@ -416,7 +418,11 @@ export class Zombie extends Enemy {
                     loop = false;
                 } else {
                     const idleKey = `${this.animPrefix}_idle`;
-                    if (Math.abs(this.vx) > 4) {
+                    const runKey = `${this.animPrefix}_run`;
+                    if (Math.abs(this.vx) >= 120 && this.spriteAtlas.getFrameCount(runKey) > 0) {
+                        animKey = runKey;
+                        frameIdx = Math.floor(this.stridePhase);
+                    } else if (Math.abs(this.vx) > 4) {
                         animKey = `${this.animPrefix}_walk`;
                         frameIdx = Math.floor(this.stridePhase);
                     } else if (this.spriteAtlas.getFrameCount(idleKey) > 0) {
